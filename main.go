@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
+import "log"
 
 func main() {
-	fmt.Println("Hello, World!")
+	log.Println("Asaas integration module loaded. Import the payments package to use the API client and services.")
 }
