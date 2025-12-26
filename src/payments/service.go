@@ -108,15 +108,15 @@ func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (Invoic
 
 	now := time.Now().UTC()
 	local := InvoiceRecord{
-		ID:          remote.ID,
-		ExternalID:  remote.ExternalID,
-		CustomerID:  req.Customer,
-		Status:      remote.Status,
-		Value:       remote.Value,
-		DueDate:     parseDate(req.DueDate),
-		PaymentLink: remote.PaymentLink,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:            remote.ID,
+		ExternalID:    remote.ExternalID,
+		CustomerID:    remote.Customer,
+		Status:        remote.Status,
+		Value:         remote.Value,
+		EffectiveDate: parseDate(req.EffectiveDate),
+		PaymentLink:   remote.PaymentLink,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := s.repo.SaveInvoice(ctx, local); err != nil {

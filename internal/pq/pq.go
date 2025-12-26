@@ -6,6 +6,9 @@ import (
 	"errors"
 )
 
+// ErrDriverUnavailable signals that the stub driver is active in offline mode.
+var ErrDriverUnavailable = errors.New("pq driver is unavailable in offline environment")
+
 func init() {
 	sql.Register("postgres", Driver{})
 }
@@ -23,7 +26,7 @@ type Rows struct{}
 type Result struct{}
 
 func (Driver) Open(name string) (driver.Conn, error) {
-	return Conn{}, errors.New("pq driver is unavailable in offline environment")
+	return Conn{}, ErrDriverUnavailable
 }
 
 func (Conn) Prepare(query string) (driver.Stmt, error) { return Stmt{}, errors.New("not implemented") }

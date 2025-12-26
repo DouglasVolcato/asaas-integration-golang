@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
@@ -25,6 +26,11 @@ type AppConfig struct {
 
 func main() {
 	ctx := context.Background()
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -132,6 +138,20 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 			respondJSON(w, remote, http.StatusCreated)
 		})
 
+		pr.Get("/", func(w http.ResponseWriter, req *http.Request) {
+			externalRef := req.URL.Query().Get("externalReference")
+			if externalRef == "" {
+				http.Error(w, "externalReference is required", http.StatusBadRequest)
+				return
+			}
+			payment, err := client.GetPayment(req.Context(), externalRef)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			respondJSON(w, payment, http.StatusOK)
+		})
+
 		pr.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
 			paymentID := chi.URLParam(req, "id")
 			payment, err := client.GetPayment(req.Context(), paymentID)
@@ -158,13 +178,18 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 			respondJSON(w, remote, http.StatusCreated)
 		})
 
-		sr.Post("/{id}/cancel", func(w http.ResponseWriter, req *http.Request) {
-			subID := chi.URLParam(req, "id")
-			if err := client.CancelSubscription(req.Context(), subID); err != nil {
+		sr.Post("/cancel", func(w http.ResponseWriter, req *http.Request) {
+			externalRef := req.URL.Query().Get("externalReference")
+			if externalRef == "" {
+				http.Error(w, "externalReference is required", http.StatusBadRequest)
+				return
+			}
+			subscription, err := client.CancelSubscription(req.Context(), externalRef)
+			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
 			}
-			w.WriteHeader(http.StatusNoContent)
+			respondJSON(w, subscription, http.StatusOK)
 		})
 	})
 
@@ -181,6 +206,20 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
+		})
+
+		ir.Get("/", func(w http.ResponseWriter, req *http.Request) {
+			externalRef := req.URL.Query().Get("externalReference")
+			if externalRef == "" {
+				http.Error(w, "externalReference is required", http.StatusBadRequest)
+				return
+			}
+			invoice, err := client.GetInvoice(req.Context(), externalRef)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			respondJSON(w, invoice, http.StatusOK)
 		})
 
 		ir.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {

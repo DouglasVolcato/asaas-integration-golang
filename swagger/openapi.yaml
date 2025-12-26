@@ -53,12 +53,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaymentResponse'
-  /payments/{id}:
     get:
       summary: Consulta pagamento direto no Asaas
       parameters:
-        - in: path
-          name: id
+        - in: query
+          name: externalReference
           required: true
           schema:
             type: string
@@ -85,18 +84,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SubscriptionResponse'
-  /subscriptions/{id}/cancel:
+  /subscriptions/cancel:
     post:
       summary: Cancela uma assinatura
       parameters:
-        - in: path
-          name: id
+        - in: query
+          name: externalReference
           required: true
           schema:
             type: string
       responses:
-        '204':
+        '200':
           description: Cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
   /invoices:
     post:
       summary: Cria uma nota fiscal
@@ -113,12 +116,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvoiceResponse'
-  /invoices/{id}:
     get:
       summary: Consulta nota fiscal direto no Asaas
       parameters:
-        - in: path
-          name: id
+        - in: query
+          name: externalReference
           required: true
           schema:
             type: string
@@ -151,9 +153,7 @@ components:
           type: string
         email:
           type: string
-        cpf:
-          type: string
-        cnpj:
+        cpfCnpj:
           type: string
         phone:
           type: string
@@ -188,7 +188,7 @@ components:
           type: string
     PaymentRequest:
       type: object
-      required: [customer, billingType, value, dueDate]
+      required: [customer, billingType, value, dueDate, callback]
       properties:
         customer:
           type: string
@@ -205,8 +205,8 @@ components:
           type: integer
         externalReference:
           type: string
-        callbackUrl:
-          type: string
+        callback:
+          $ref: '#/components/schemas/PaymentCallback'
     PaymentResponse:
       type: object
       properties:
@@ -226,6 +226,14 @@ components:
           type: string
         transactionReceiptUrl:
           type: string
+    PaymentCallback:
+      type: object
+      required: [successUrl, autoRedirect]
+      properties:
+        successUrl:
+          type: string
+        autoRedirect:
+          type: boolean
     SubscriptionRequest:
       type: object
       required: [customer, billingType, value, nextDueDate, cycle]
@@ -265,21 +273,37 @@ components:
           type: string
     InvoiceRequest:
       type: object
-      required: [customer, value, dueDate]
+      required: [serviceDescription, observations, value, deductions, effectiveDate, municipalServiceName, taxes]
       properties:
+        payment:
+          type: string
+        installment:
+          type: string
         customer:
           type: string
-        value:
-          type: number
-        dueDate:
+        serviceDescription:
           type: string
-          format: date
-        description:
+        observations:
           type: string
         externalReference:
           type: string
-        paymentLink:
+        value:
+          type: number
+        deductions:
+          type: number
+        effectiveDate:
+          type: string
+          format: date
+        municipalServiceId:
+          type: string
+        municipalServiceCode:
+          type: string
+        municipalServiceName:
+          type: string
+        updatePayment:
           type: boolean
+        taxes:
+          $ref: '#/components/schemas/InvoiceTaxes'
     InvoiceResponse:
       type: object
       properties:
@@ -295,6 +319,24 @@ components:
           type: string
         paymentLink:
           type: string
+    InvoiceTaxes:
+      type: object
+      required: [retainIss, cofins, csll, inss, ir, pis, iss]
+      properties:
+        retainIss:
+          type: boolean
+        cofins:
+          type: number
+        csll:
+          type: number
+        inss:
+          type: number
+        ir:
+          type: number
+        pis:
+          type: number
+        iss:
+          type: number
     WebhookEvent:
       type: object
       properties:

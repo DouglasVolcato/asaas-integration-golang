@@ -76,7 +76,7 @@ func (r *PostgresRepository) EnsureSchema(ctx context.Context) error {
             customer_id TEXT NOT NULL REFERENCES customers(id),
             status TEXT NOT NULL,
             value NUMERIC NOT NULL,
-            due_date TIMESTAMPTZ NOT NULL,
+            effective_date TIMESTAMPTZ NOT NULL,
             payment_link TEXT,
             created_at TIMESTAMPTZ NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL
@@ -151,9 +151,9 @@ func (r *PostgresRepository) UpdateSubscriptionExternalID(ctx context.Context, i
 // SaveInvoice inserts an invoice row.
 func (r *PostgresRepository) SaveInvoice(ctx context.Context, invoice InvoiceRecord) error {
 	_, err := r.db.ExecContext(ctx, `
-        INSERT INTO invoices (id, external_id, customer_id, status, value, due_date, payment_link, created_at, updated_at)
+        INSERT INTO invoices (id, external_id, customer_id, status, value, effective_date, payment_link, created_at, updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    `, invoice.ID, invoice.ExternalID, invoice.CustomerID, invoice.Status, invoice.Value, invoice.DueDate, invoice.PaymentLink, invoice.CreatedAt, invoice.UpdatedAt)
+    `, invoice.ID, invoice.ExternalID, invoice.CustomerID, invoice.Status, invoice.Value, invoice.EffectiveDate, invoice.PaymentLink, invoice.CreatedAt, invoice.UpdatedAt)
 	return err
 }
 
