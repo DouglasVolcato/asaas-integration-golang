@@ -42,13 +42,13 @@ type SubscriptionRecord struct {
 
 // InvoiceRecord represents an invoice persisted locally.
 type InvoiceRecord struct {
-	ID          string
-	ExternalID  string
-	CustomerID  string
-	Status      string
-	Value       float64
-	DueDate     time.Time
-	PaymentLink string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            string
+	ExternalID    string
+	CustomerID    string
+	Status        string
+	Value         float64
+	EffectiveDate time.Time
+	PaymentLink   string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
