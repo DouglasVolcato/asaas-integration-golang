@@ -125,16 +125,6 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 			}
 			respondJSON(w, customer, http.StatusOK)
 		})
-
-		cr.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
-			customerID := chi.URLParam(req, "id")
-			customer, err := client.GetCustomer(req.Context(), customerID)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
-				return
-			}
-			respondJSON(w, customer, http.StatusOK)
-		})
 	})
 
 	r.Route("/payments", func(pr chi.Router) {
@@ -159,16 +149,6 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			payment, err := client.GetPayment(req.Context(), externalRef)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
-				return
-			}
-			respondJSON(w, payment, http.StatusOK)
-		})
-
-		pr.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
-			paymentID := chi.URLParam(req, "id")
-			payment, err := client.GetPayment(req.Context(), paymentID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
@@ -229,16 +209,6 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			invoice, err := client.GetInvoice(req.Context(), externalRef)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
-				return
-			}
-			respondJSON(w, invoice, http.StatusOK)
-		})
-
-		ir.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
-			invoiceID := chi.URLParam(req, "id")
-			invoice, err := client.GetInvoice(req.Context(), invoiceID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
