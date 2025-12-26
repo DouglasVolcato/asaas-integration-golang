@@ -21,12 +21,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomerResponse'
-  /customers/{id}:
     get:
       summary: Busca um cliente direto no Asaas
       parameters:
-        - in: path
-          name: id
+        - in: query
+          name: externalReference
           required: true
           schema:
             type: string
@@ -192,6 +191,7 @@ components:
       properties:
         customer:
           type: string
+          description: ExternalReference do cliente no seu sistema.
         billingType:
           type: string
         value:
@@ -240,6 +240,7 @@ components:
       properties:
         customer:
           type: string
+          description: ExternalReference do cliente no seu sistema.
         billingType:
           type: string
         value:
@@ -273,14 +274,11 @@ components:
           type: string
     InvoiceRequest:
       type: object
-      required: [serviceDescription, observations, value, deductions, effectiveDate, municipalServiceName, taxes]
+      required: [payment, serviceDescription, observations, value, deductions, effectiveDate, municipalServiceName, taxes]
       properties:
         payment:
           type: string
-        installment:
-          type: string
-        customer:
-          type: string
+          description: ExternalReference da cobrança no seu sistema.
         serviceDescription:
           type: string
         observations:

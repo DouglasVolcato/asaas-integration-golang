@@ -119,9 +119,7 @@ type SubscriptionListResponse struct {
 
 // InvoiceRequest represents the payload to create an invoice in Asaas.
 type InvoiceRequest struct {
-	Payment              string       `json:"payment,omitempty"`
-	Installment          string       `json:"installment,omitempty"`
-	Customer             string       `json:"customer,omitempty"`
+	Payment              string       `json:"payment"`
 	ServiceDescription   string       `json:"serviceDescription"`
 	Observations         string       `json:"observations"`
 	ExternalID           string       `json:"externalReference,omitempty"`

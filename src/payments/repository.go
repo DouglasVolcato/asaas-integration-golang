@@ -11,10 +11,12 @@ import (
 type Repository interface {
 	SaveCustomer(ctx context.Context, customer CustomerRecord) error
 	UpdateCustomerExternalID(ctx context.Context, id, externalID string) error
+	FindCustomerByExternalID(ctx context.Context, externalID string) (CustomerRecord, error)
 
 	SavePayment(ctx context.Context, payment PaymentRecord) error
 	UpdatePaymentStatus(ctx context.Context, id, status, invoiceURL, receiptURL string) error
 	UpdatePaymentExternalID(ctx context.Context, id, externalID string) error
+	FindPaymentByExternalID(ctx context.Context, externalID string) (PaymentRecord, error)
 
 	SaveSubscription(ctx context.Context, subscription SubscriptionRecord) error
 	UpdateSubscriptionStatus(ctx context.Context, id, status string) error
@@ -106,6 +108,20 @@ func (r *PostgresRepository) UpdateCustomerExternalID(ctx context.Context, id, e
 	return err
 }
 
+// FindCustomerByExternalID returns a customer record by external reference.
+func (r *PostgresRepository) FindCustomerByExternalID(ctx context.Context, externalID string) (CustomerRecord, error) {
+	var customer CustomerRecord
+	row := r.db.QueryRowContext(ctx, `
+        SELECT id, external_id, name, email, created_at, updated_at
+        FROM customers
+        WHERE external_id = $1
+    `, externalID)
+	if err := row.Scan(&customer.ID, &customer.ExternalID, &customer.Name, &customer.Email, &customer.CreatedAt, &customer.UpdatedAt); err != nil {
+		return CustomerRecord{}, err
+	}
+	return customer, nil
+}
+
 // SavePayment inserts a new payment row.
 func (r *PostgresRepository) SavePayment(ctx context.Context, payment PaymentRecord) error {
 	_, err := r.db.ExecContext(ctx, `
@@ -125,6 +141,32 @@ func (r *PostgresRepository) UpdatePaymentStatus(ctx context.Context, id, status
 func (r *PostgresRepository) UpdatePaymentExternalID(ctx context.Context, id, externalID string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE payments SET external_id=$1, updated_at=$2 WHERE id=$3`, externalID, time.Now().UTC(), id)
 	return err
+}
+
+// FindPaymentByExternalID returns a payment record by external reference.
+func (r *PostgresRepository) FindPaymentByExternalID(ctx context.Context, externalID string) (PaymentRecord, error) {
+	var payment PaymentRecord
+	row := r.db.QueryRowContext(ctx, `
+        SELECT id, external_id, customer_id, billing_type, value, due_date, status, invoice_url, transaction_receipt_url, created_at, updated_at
+        FROM payments
+        WHERE external_id = $1
+    `, externalID)
+	if err := row.Scan(
+		&payment.ID,
+		&payment.ExternalID,
+		&payment.CustomerID,
+		&payment.BillingType,
+		&payment.Value,
+		&payment.DueDate,
+		&payment.Status,
+		&payment.InvoiceURL,
+		&payment.TransactionReceiptURL,
+		&payment.CreatedAt,
+		&payment.UpdatedAt,
+	); err != nil {
+		return PaymentRecord{}, err
+	}
+	return payment, nil
 }
 
 // SaveSubscription inserts a subscription row.
@@ -202,6 +244,15 @@ func (r *InMemoryRepository) UpdateCustomerExternalID(_ context.Context, id, ext
 	return nil
 }
 
+func (r *InMemoryRepository) FindCustomerByExternalID(_ context.Context, externalID string) (CustomerRecord, error) {
+	for _, customer := range r.customers {
+		if customer.ExternalID == externalID {
+			return customer, nil
+		}
+	}
+	return CustomerRecord{}, fmt.Errorf("customer externalReference %s not found", externalID)
+}
+
 func (r *InMemoryRepository) SavePayment(_ context.Context, payment PaymentRecord) error {
 	r.payments[payment.ID] = payment
 	return nil
@@ -227,6 +278,15 @@ func (r *InMemoryRepository) UpdatePaymentExternalID(_ context.Context, id, exte
 	p.ExternalID = externalID
 	r.payments[id] = p
 	return nil
+}
+
+func (r *InMemoryRepository) FindPaymentByExternalID(_ context.Context, externalID string) (PaymentRecord, error) {
+	for _, payment := range r.payments {
+		if payment.ExternalID == externalID {
+			return payment, nil
+		}
+	}
+	return PaymentRecord{}, fmt.Errorf("payment externalReference %s not found", externalID)
 }
 
 func (r *InMemoryRepository) SaveSubscription(_ context.Context, subscription SubscriptionRecord) error {
