@@ -112,6 +112,20 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 			respondJSON(w, remote, http.StatusCreated)
 		})
 
+		cr.Get("/", func(w http.ResponseWriter, req *http.Request) {
+			externalRef := req.URL.Query().Get("externalReference")
+			if externalRef == "" {
+				http.Error(w, "externalReference is required", http.StatusBadRequest)
+				return
+			}
+			customer, err := client.GetCustomer(req.Context(), externalRef)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+			respondJSON(w, customer, http.StatusOK)
+		})
+
 		cr.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
 			customerID := chi.URLParam(req, "id")
 			customer, err := client.GetCustomer(req.Context(), customerID)

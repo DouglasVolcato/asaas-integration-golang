@@ -45,7 +45,14 @@ func (s *Service) RegisterCustomer(ctx context.Context, req CustomerRequest) (Cu
 
 // CreatePayment persists the payment locally and in Asaas.
 func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (PaymentRecord, PaymentResponse, error) {
-	remote, err := s.client.CreatePayment(ctx, req)
+	customer, err := s.repo.FindCustomerByExternalID(ctx, req.Customer)
+	if err != nil {
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to resolve customer externalReference %s: %w", req.Customer, err)
+	}
+
+	asaasReq := req
+	asaasReq.Customer = customer.ID
+	remote, err := s.client.CreatePayment(ctx, asaasReq)
 	if err != nil {
 		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to create asaas payment: %w", err)
 	}
@@ -54,7 +61,7 @@ func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (Paymen
 	local := PaymentRecord{
 		ID:                    remote.ID,
 		ExternalID:            remote.ExternalID,
-		CustomerID:            req.Customer,
+		CustomerID:            remote.Customer,
 		BillingType:           remote.BillingType,
 		Value:                 remote.Value,
 		DueDate:               parseDate(req.DueDate),
@@ -74,7 +81,14 @@ func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (Paymen
 
 // CreateSubscription persists the subscription locally and remotely.
 func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionRequest) (SubscriptionRecord, SubscriptionResponse, error) {
-	remote, err := s.client.CreateSubscription(ctx, req)
+	customer, err := s.repo.FindCustomerByExternalID(ctx, req.Customer)
+	if err != nil {
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to resolve customer externalReference %s: %w", req.Customer, err)
+	}
+
+	asaasReq := req
+	asaasReq.Customer = customer.ID
+	remote, err := s.client.CreateSubscription(ctx, asaasReq)
 	if err != nil {
 		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to create asaas subscription: %w", err)
 	}
@@ -83,7 +97,7 @@ func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionReques
 	local := SubscriptionRecord{
 		ID:          remote.ID,
 		ExternalID:  remote.ExternalID,
-		CustomerID:  req.Customer,
+		CustomerID:  remote.Customer,
 		Status:      remote.Status,
 		Value:       remote.Value,
 		Cycle:       req.Cycle,
@@ -101,7 +115,14 @@ func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionReques
 
 // CreateInvoice persists the invoice locally and in Asaas.
 func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (InvoiceRecord, InvoiceResponse, error) {
-	remote, err := s.client.CreateInvoice(ctx, req)
+	payment, err := s.repo.FindPaymentByExternalID(ctx, req.Payment)
+	if err != nil {
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to resolve payment externalReference %s: %w", req.Payment, err)
+	}
+
+	asaasReq := req
+	asaasReq.Payment = payment.ID
+	remote, err := s.client.CreateInvoice(ctx, asaasReq)
 	if err != nil {
 		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to create asaas invoice: %w", err)
 	}
