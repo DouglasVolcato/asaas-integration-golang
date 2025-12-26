@@ -21,130 +21,107 @@ func NewService(repo Repository, client *AsaasClient) *Service {
 
 // RegisterCustomer stores a local customer and creates it in Asaas.
 func (s *Service) RegisterCustomer(ctx context.Context, req CustomerRequest) (CustomerRecord, CustomerResponse, error) {
-	now := time.Now().UTC()
-	local := CustomerRecord{
-		ID:        generateID(),
-		Name:      req.Name,
-		Email:     req.Email,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := s.repo.SaveCustomer(ctx, local); err != nil {
-		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to save local customer: %w", err)
-	}
-
 	remote, err := s.client.CreateCustomer(ctx, req)
 	if err != nil {
 		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to create asaas customer: %w", err)
 	}
-	if err := s.repo.UpdateCustomerExternalID(ctx, local.ID, remote.ID); err != nil {
-		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to update customer external id: %w", err)
+
+	now := time.Now().UTC()
+	local := CustomerRecord{
+		ID:         remote.ID,
+		ExternalID: remote.ExternalID,
+		Name:       remote.Name,
+		Email:      remote.Email,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
-	local.ExternalID = remote.ID
+
+	if err := s.repo.SaveCustomer(ctx, local); err != nil {
+		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to save local customer: %w", err)
+	}
 
 	return local, remote, nil
 }
 
 // CreatePayment persists the payment locally and in Asaas.
-func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest, customerID string) (PaymentRecord, PaymentResponse, error) {
-	now := time.Now().UTC()
-	local := PaymentRecord{
-		ID:          generateID(),
-		CustomerID:  customerID,
-		BillingType: req.BillingType,
-		Value:       req.Value,
-		DueDate:     parseDate(req.DueDate),
-		Status:      "PENDING",
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	if err := s.repo.SavePayment(ctx, local); err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to save local payment: %w", err)
-	}
-
+func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (PaymentRecord, PaymentResponse, error) {
 	remote, err := s.client.CreatePayment(ctx, req)
 	if err != nil {
 		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to create asaas payment: %w", err)
 	}
 
-	if err := s.repo.UpdatePaymentExternalID(ctx, local.ID, remote.ID); err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to update payment external id: %w", err)
+	now := time.Now().UTC()
+	local := PaymentRecord{
+		ID:                    remote.ID,
+		ExternalID:            remote.ExternalID,
+		CustomerID:            req.Customer,
+		BillingType:           remote.BillingType,
+		Value:                 remote.Value,
+		DueDate:               parseDate(req.DueDate),
+		Status:                remote.Status,
+		InvoiceURL:            remote.InvoiceURL,
+		TransactionReceiptURL: remote.TransactionReceiptURL,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
-	if err := s.repo.UpdatePaymentStatus(ctx, local.ID, remote.Status, remote.InvoiceURL, remote.TransactionReceiptURL); err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to sync payment status: %w", err)
+
+	if err := s.repo.SavePayment(ctx, local); err != nil {
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to save local payment: %w", err)
 	}
-	local.ExternalID = remote.ID
-	local.Status = remote.Status
-	local.InvoiceURL = remote.InvoiceURL
-	local.TransactionReceiptURL = remote.TransactionReceiptURL
 
 	return local, remote, nil
 }
 
 // CreateSubscription persists the subscription locally and remotely.
-func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionRequest, customerID string) (SubscriptionRecord, SubscriptionResponse, error) {
-	now := time.Now().UTC()
-	local := SubscriptionRecord{
-		ID:          generateID(),
-		CustomerID:  customerID,
-		Status:      "PENDING",
-		Value:       req.Value,
-		Cycle:       req.Cycle,
-		NextDueDate: parseDate(req.NextDueDate),
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	if err := s.repo.SaveSubscription(ctx, local); err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to save local subscription: %w", err)
-	}
-
+func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionRequest) (SubscriptionRecord, SubscriptionResponse, error) {
 	remote, err := s.client.CreateSubscription(ctx, req)
 	if err != nil {
 		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to create asaas subscription: %w", err)
 	}
 
-	if err := s.repo.UpdateSubscriptionExternalID(ctx, local.ID, remote.ID); err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to update subscription external id: %w", err)
+	now := time.Now().UTC()
+	local := SubscriptionRecord{
+		ID:          remote.ID,
+		ExternalID:  remote.ExternalID,
+		CustomerID:  req.Customer,
+		Status:      remote.Status,
+		Value:       remote.Value,
+		Cycle:       req.Cycle,
+		NextDueDate: parseDate(req.NextDueDate),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
-	if err := s.repo.UpdateSubscriptionStatus(ctx, local.ID, remote.Status); err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to sync subscription status: %w", err)
+
+	if err := s.repo.SaveSubscription(ctx, local); err != nil {
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to save local subscription: %w", err)
 	}
-	local.ExternalID = remote.ID
-	local.Status = remote.Status
 
 	return local, remote, nil
 }
 
 // CreateInvoice persists the invoice locally and in Asaas.
-func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest, customerID string) (InvoiceRecord, InvoiceResponse, error) {
-	now := time.Now().UTC()
-	local := InvoiceRecord{
-		ID:         generateID(),
-		CustomerID: customerID,
-		Status:     "PENDING",
-		Value:      req.Value,
-		DueDate:    parseDate(req.DueDate),
-		CreatedAt:  now,
-		UpdatedAt:  now,
-	}
-	if err := s.repo.SaveInvoice(ctx, local); err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to save local invoice: %w", err)
-	}
-
+func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (InvoiceRecord, InvoiceResponse, error) {
 	remote, err := s.client.CreateInvoice(ctx, req)
 	if err != nil {
 		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to create asaas invoice: %w", err)
 	}
 
-	if err := s.repo.UpdateInvoiceExternalID(ctx, local.ID, remote.ID); err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to update invoice external id: %w", err)
+	now := time.Now().UTC()
+	local := InvoiceRecord{
+		ID:          remote.ID,
+		ExternalID:  remote.ExternalID,
+		CustomerID:  req.Customer,
+		Status:      remote.Status,
+		Value:       remote.Value,
+		DueDate:     parseDate(req.DueDate),
+		PaymentLink: remote.PaymentLink,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
-	if err := s.repo.UpdateInvoiceStatus(ctx, local.ID, remote.Status); err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to sync invoice status: %w", err)
+
+	if err := s.repo.SaveInvoice(ctx, local); err != nil {
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to save local invoice: %w", err)
 	}
-	local.ExternalID = remote.ID
-	local.Status = remote.Status
-	local.PaymentLink = remote.PaymentLink
 
 	return local, remote, nil
 }
@@ -156,17 +133,17 @@ func (s *Service) HandleWebhookNotification(ctx context.Context, event Notificat
 		if event.Payment == nil {
 			return fmt.Errorf("payment payload missing")
 		}
-		return s.repo.UpdatePaymentStatus(ctx, event.Payment.ExternalID, event.Payment.Status, event.Payment.InvoiceURL, event.Payment.TransactionReceiptURL)
+		return s.repo.UpdatePaymentStatus(ctx, event.Payment.ID, event.Payment.Status, event.Payment.InvoiceURL, event.Payment.TransactionReceiptURL)
 	case "SUBSCRIPTION_CREATED", "SUBSCRIPTION_UPDATED":
 		if event.Subscription == nil {
 			return fmt.Errorf("subscription payload missing")
 		}
-		return s.repo.UpdateSubscriptionStatus(ctx, event.Subscription.ExternalID, event.Subscription.Status)
+		return s.repo.UpdateSubscriptionStatus(ctx, event.Subscription.ID, event.Subscription.Status)
 	case "INVOICE_CREATED", "INVOICE_UPDATED", "INVOICE_OVERDUE":
 		if event.Invoice == nil {
 			return fmt.Errorf("invoice payload missing")
 		}
-		return s.repo.UpdateInvoiceStatus(ctx, event.Invoice.ExternalID, event.Invoice.Status)
+		return s.repo.UpdateInvoiceStatus(ctx, event.Invoice.ID, event.Invoice.Status)
 	default:
 		return fmt.Errorf("unsupported event type: %s", event.Event)
 	}

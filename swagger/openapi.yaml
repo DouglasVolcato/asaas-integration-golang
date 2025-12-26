@@ -1,0 +1,308 @@
+openapi: 3.0.3
+info:
+  title: ASAAS Integration Test API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /customers:
+    post:
+      summary: Cria um cliente no Asaas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerRequest'
+      responses:
+        '201':
+          description: Cliente criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+  /customers/{id}:
+    get:
+      summary: Busca um cliente direto no Asaas
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+  /payments:
+    post:
+      summary: Cria um pagamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '201':
+          description: Pagamento criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+  /payments/{id}:
+    get:
+      summary: Consulta pagamento direto no Asaas
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pagamento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+  /subscriptions:
+    post:
+      summary: Cria uma assinatura
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionRequest'
+      responses:
+        '201':
+          description: Assinatura criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+  /subscriptions/{id}/cancel:
+    post:
+      summary: Cancela uma assinatura
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Cancelada
+  /invoices:
+    post:
+      summary: Cria uma nota fiscal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceRequest'
+      responses:
+        '201':
+          description: Nota criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+  /invoices/{id}:
+    get:
+      summary: Consulta nota fiscal direto no Asaas
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Nota fiscal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+  /webhooks/asaas:
+    post:
+      summary: Recebe webhooks do Asaas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEvent'
+      responses:
+        '204':
+          description: Evento aceito
+components:
+  schemas:
+    CustomerRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        cpf:
+          type: string
+        cnpj:
+          type: string
+        phone:
+          type: string
+        mobilePhone:
+          type: string
+        address:
+          type: string
+        addressNumber:
+          type: string
+        complement:
+          type: string
+        province:
+          type: string
+        postalCode:
+          type: string
+        externalReference:
+          type: string
+        notificationDisabled:
+          type: boolean
+        additionalEmails:
+          type: string
+    CustomerResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        externalReference:
+          type: string
+    PaymentRequest:
+      type: object
+      required: [customer, billingType, value, dueDate]
+      properties:
+        customer:
+          type: string
+        billingType:
+          type: string
+        value:
+          type: number
+        dueDate:
+          type: string
+          format: date
+        description:
+          type: string
+        installmentCount:
+          type: integer
+        externalReference:
+          type: string
+        callbackUrl:
+          type: string
+    PaymentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        customer:
+          type: string
+        billingType:
+          type: string
+        value:
+          type: number
+        status:
+          type: string
+        externalReference:
+          type: string
+        invoiceUrl:
+          type: string
+        transactionReceiptUrl:
+          type: string
+    SubscriptionRequest:
+      type: object
+      required: [customer, billingType, value, nextDueDate, cycle]
+      properties:
+        customer:
+          type: string
+        billingType:
+          type: string
+        value:
+          type: number
+        nextDueDate:
+          type: string
+          format: date
+        cycle:
+          type: string
+        externalReference:
+          type: string
+        description:
+          type: string
+        endDate:
+          type: string
+          format: date
+        maxPayments:
+          type: integer
+    SubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        customer:
+          type: string
+        status:
+          type: string
+        value:
+          type: number
+        externalReference:
+          type: string
+    InvoiceRequest:
+      type: object
+      required: [customer, value, dueDate]
+      properties:
+        customer:
+          type: string
+        value:
+          type: number
+        dueDate:
+          type: string
+          format: date
+        description:
+          type: string
+        externalReference:
+          type: string
+        paymentLink:
+          type: boolean
+    InvoiceResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        customer:
+          type: string
+        status:
+          type: string
+        value:
+          type: number
+        externalReference:
+          type: string
+        paymentLink:
+          type: string
+    WebhookEvent:
+      type: object
+      properties:
+        event:
+          type: string
+        payment:
+          $ref: '#/components/schemas/PaymentResponse'
+        invoice:
+          $ref: '#/components/schemas/InvoiceResponse'
+        subscription:
+          $ref: '#/components/schemas/SubscriptionResponse'
