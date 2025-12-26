@@ -113,12 +113,12 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 		})
 
 		cr.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
+			id := req.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
 				return
 			}
-			customer, err := client.GetCustomer(req.Context(), externalRef)
+			customer, err := client.GetCustomer(req.Context(), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
@@ -143,12 +143,12 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 		})
 
 		pr.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
+			id := req.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
 				return
 			}
-			payment, err := client.GetPayment(req.Context(), externalRef)
+			payment, err := client.GetPayment(req.Context(), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
@@ -173,12 +173,12 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 		})
 
 		sr.Post("/cancel", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
+			id := req.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
 				return
 			}
-			subscription, err := client.CancelSubscription(req.Context(), externalRef)
+			subscription, err := client.CancelSubscription(req.Context(), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
@@ -203,12 +203,12 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 		})
 
 		ir.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
+			id := req.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
 				return
 			}
-			invoice, err := client.GetInvoice(req.Context(), externalRef)
+			invoice, err := client.GetInvoice(req.Context(), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return

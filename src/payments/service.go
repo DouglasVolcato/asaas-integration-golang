@@ -3,7 +3,9 @@ package payments
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -21,15 +23,9 @@ func NewService(repo Repository, client *AsaasClient) *Service {
 
 // RegisterCustomer stores a local customer and creates it in Asaas.
 func (s *Service) RegisterCustomer(ctx context.Context, req CustomerRequest) (CustomerRecord, CustomerResponse, error) {
-	remote, err := s.client.CreateCustomer(ctx, req)
-	if err != nil {
-		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to create asaas customer: %w", err)
-	}
-
 	now := time.Now().UTC()
 	local := CustomerRecord{
 		ID:                   generateID(),
-		ExternalReference:    req.ExternalID,
 		Name:                 req.Name,
 		Email:                req.Email,
 		CpfCnpj:              req.CpfCnpj,
@@ -45,6 +41,12 @@ func (s *Service) RegisterCustomer(ctx context.Context, req CustomerRequest) (Cu
 		CreatedAt:            now,
 		UpdatedAt:            now,
 	}
+	req.ExternalID = local.ID
+
+	remote, err := s.client.CreateCustomer(ctx, req)
+	if err != nil {
+		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to create asaas customer: %w", err)
+	}
 
 	if err := s.repo.SaveCustomer(ctx, local); err != nil {
 		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to save local customer: %w", err)
@@ -55,16 +57,18 @@ func (s *Service) RegisterCustomer(ctx context.Context, req CustomerRequest) (Cu
 
 // CreatePayment persists the payment locally and in Asaas.
 func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (PaymentRecord, PaymentResponse, error) {
-	customer, err := s.repo.FindCustomerByExternalReference(ctx, req.Customer)
+	customer, err := s.repo.FindCustomerByID(ctx, req.Customer)
 	if err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to resolve customer externalReference %s: %w", req.Customer, err)
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to resolve customer %s: %w", req.Customer, err)
 	}
 
-	remoteCustomer, err := s.client.GetCustomer(ctx, req.Customer)
+	remoteCustomer, err := s.client.GetCustomer(ctx, customer.ID)
 	if err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to fetch asaas customer for externalReference %s: %w", req.Customer, err)
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to fetch asaas customer for id %s:%w", req.Customer, err)
 	}
 
+	localID := generateID()
+	req.ExternalID = localID
 	asaasReq := req
 	asaasReq.Customer = remoteCustomer.ID
 	remote, err := s.client.CreatePayment(ctx, asaasReq)
@@ -81,22 +85,20 @@ func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (Paymen
 
 	now := time.Now().UTC()
 	local := PaymentRecord{
-		ID:                        generateID(),
-		ExternalReference:         req.ExternalID,
-		CustomerID:                customer.ID,
-		CustomerExternalReference: req.Customer,
-		BillingType:               req.BillingType,
-		Value:                     req.Value,
-		DueDate:                   parseDate(req.DueDate),
-		Description:               req.Description,
-		InstallmentCount:          req.InstallmentCount,
-		CallbackSuccessURL:        callbackSuccessURL,
-		CallbackAutoRedirect:      callbackAutoRedirect,
-		Status:                    remote.Status,
-		InvoiceURL:                remote.InvoiceURL,
-		TransactionReceiptURL:     remote.TransactionReceiptURL,
-		CreatedAt:                 now,
-		UpdatedAt:                 now,
+		ID:                    localID,
+		CustomerID:            customer.ID,
+		BillingType:           req.BillingType,
+		Value:                 req.Value,
+		DueDate:               parseDate(req.DueDate),
+		Description:           req.Description,
+		InstallmentCount:      req.InstallmentCount,
+		CallbackSuccessURL:    callbackSuccessURL,
+		CallbackAutoRedirect:  callbackAutoRedirect,
+		Status:                remote.Status,
+		InvoiceURL:            remote.InvoiceURL,
+		TransactionReceiptURL: remote.TransactionReceiptURL,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 
 	if err := s.repo.SavePayment(ctx, local); err != nil {
@@ -108,16 +110,18 @@ func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (Paymen
 
 // CreateSubscription persists the subscription locally and remotely.
 func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionRequest) (SubscriptionRecord, SubscriptionResponse, error) {
-	customer, err := s.repo.FindCustomerByExternalReference(ctx, req.Customer)
+	customer, err := s.repo.FindCustomerByID(ctx, req.Customer)
 	if err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to resolve customer externalReference %s: %w", req.Customer, err)
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to resolve customer %s: %w", req.Customer, err)
 	}
 
-	remoteCustomer, err := s.client.GetCustomer(ctx, req.Customer)
+	remoteCustomer, err := s.client.GetCustomer(ctx, customer.ID)
 	if err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to fetch asaas customer for externalReference %s: %w", req.Customer, err)
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to fetch asaas customer for id %s: %w", req.Customer, err)
 	}
 
+	localID := generateID()
+	req.ExternalID = localID
 	asaasReq := req
 	asaasReq.Customer = remoteCustomer.ID
 	remote, err := s.client.CreateSubscription(ctx, asaasReq)
@@ -127,20 +131,18 @@ func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionReques
 
 	now := time.Now().UTC()
 	local := SubscriptionRecord{
-		ID:                        generateID(),
-		ExternalReference:         req.ExternalID,
-		CustomerID:                customer.ID,
-		CustomerExternalReference: req.Customer,
-		BillingType:               req.BillingType,
-		Status:                    remote.Status,
-		Value:                     req.Value,
-		Cycle:                     req.Cycle,
-		NextDueDate:               parseDate(req.NextDueDate),
-		Description:               req.Description,
-		EndDate:                   parseDate(req.EndDate),
-		MaxPayments:               req.MaxPayments,
-		CreatedAt:                 now,
-		UpdatedAt:                 now,
+		ID:          localID,
+		CustomerID:  customer.ID,
+		BillingType: req.BillingType,
+		Status:      remote.Status,
+		Value:       req.Value,
+		Cycle:       req.Cycle,
+		NextDueDate: parseDate(req.NextDueDate),
+		Description: req.Description,
+		EndDate:     parseDate(req.EndDate),
+		MaxPayments: req.MaxPayments,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if err := s.repo.SaveSubscription(ctx, local); err != nil {
@@ -152,16 +154,18 @@ func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionReques
 
 // CreateInvoice persists the invoice locally and in Asaas.
 func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (InvoiceRecord, InvoiceResponse, error) {
-	payment, err := s.repo.FindPaymentByExternalReference(ctx, req.Payment)
+	payment, err := s.repo.FindPaymentByID(ctx, req.Payment)
 	if err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to resolve payment externalReference %s: %w", req.Payment, err)
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to resolve payment %s: %w", req.Payment, err)
 	}
 
-	remotePayment, err := s.client.GetPayment(ctx, req.Payment)
+	remotePayment, err := s.client.GetPayment(ctx, payment.ID)
 	if err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to fetch asaas payment for externalReference %s: %w", req.Payment, err)
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to fetch asaas payment for id %s: %w", req.Payment, err)
 	}
 
+	localID := generateID()
+	req.ExternalID = localID
 	asaasReq := req
 	asaasReq.Payment = remotePayment.ID
 	remote, err := s.client.CreateInvoice(ctx, asaasReq)
@@ -171,30 +175,28 @@ func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (Invoic
 
 	now := time.Now().UTC()
 	local := InvoiceRecord{
-		ID:                       generateID(),
-		ExternalReference:        req.ExternalID,
-		PaymentID:                payment.ID,
-		PaymentExternalReference: req.Payment,
-		ServiceDescription:       req.ServiceDescription,
-		Observations:             req.Observations,
-		Value:                    req.Value,
-		Deductions:               req.Deductions,
-		EffectiveDate:            parseDate(req.EffectiveDate),
-		MunicipalServiceID:       req.MunicipalServiceID,
-		MunicipalServiceCode:     req.MunicipalServiceCode,
-		MunicipalServiceName:     req.MunicipalServiceName,
-		UpdatePayment:            req.UpdatePayment,
-		TaxesRetainISS:           req.Taxes.RetainISS,
-		TaxesCofins:              req.Taxes.Cofins,
-		TaxesCsll:                req.Taxes.Csll,
-		TaxesINSS:                req.Taxes.INSS,
-		TaxesIR:                  req.Taxes.IR,
-		TaxesPIS:                 req.Taxes.PIS,
-		TaxesISS:                 req.Taxes.ISS,
-		Status:                   remote.Status,
-		PaymentLink:              remote.PaymentLink,
-		CreatedAt:                now,
-		UpdatedAt:                now,
+		ID:                   localID,
+		PaymentID:            payment.ID,
+		ServiceDescription:   req.ServiceDescription,
+		Observations:         req.Observations,
+		Value:                req.Value,
+		Deductions:           req.Deductions,
+		EffectiveDate:        parseDate(req.EffectiveDate),
+		MunicipalServiceID:   req.MunicipalServiceID,
+		MunicipalServiceCode: req.MunicipalServiceCode,
+		MunicipalServiceName: req.MunicipalServiceName,
+		UpdatePayment:        req.UpdatePayment,
+		TaxesRetainISS:       req.Taxes.RetainISS,
+		TaxesCofins:          req.Taxes.Cofins,
+		TaxesCsll:            req.Taxes.Csll,
+		TaxesINSS:            req.Taxes.INSS,
+		TaxesIR:              req.Taxes.IR,
+		TaxesPIS:             req.Taxes.PIS,
+		TaxesISS:             req.Taxes.ISS,
+		Status:               remote.Status,
+		PaymentLink:          remote.PaymentLink,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 
 	if err := s.repo.SaveInvoice(ctx, local); err != nil {
@@ -207,11 +209,19 @@ func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (Invoic
 // HandleWebhookNotification updates local records based on webhook events.
 func (s *Service) HandleWebhookNotification(ctx context.Context, event NotificationEvent) error {
 	switch event.Event {
-	case "PAYMENT_CREATED", "PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_OVERDUE":
+	case "PAYMENT_CREATED":
+		return nil
+	case "PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_OVERDUE":
 		if event.Payment == nil {
 			return fmt.Errorf("payment payload missing")
 		}
-		return s.repo.UpdatePaymentStatus(ctx, event.Payment.ExternalID, event.Payment.Status, event.Payment.InvoiceURL, event.Payment.TransactionReceiptURL)
+		if err := s.repo.UpdatePaymentStatus(ctx, event.Payment.ExternalID, event.Payment.Status, event.Payment.InvoiceURL, event.Payment.TransactionReceiptURL); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	case "SUBSCRIPTION_CREATED", "SUBSCRIPTION_UPDATED":
 		if event.Subscription == nil {
 			return fmt.Errorf("subscription payload missing")
