@@ -164,7 +164,10 @@ func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (Invoic
 		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to fetch asaas payment for id %s: %w", req.Payment, err)
 	}
 
-	localID := generateID()
+	localID := req.ExternalID
+	if localID == "" {
+		localID = payment.ID
+	}
 	req.ExternalID = localID
 	asaasReq := req
 	asaasReq.Payment = remotePayment.ID
@@ -270,26 +273,22 @@ func (s *Service) issueInvoiceForPayment(ctx context.Context, payment PaymentRec
 		return err
 	}
 
-	description := payment.Description
-	if description == "" {
-		description = fmt.Sprintf("Serviço referente ao pagamento %s", payment.ID)
-	}
-
 	req := InvoiceRequest{
-		Payment:            payment.ID,
-		ServiceDescription: description,
-		Observations:       "",
-		Value:              payment.Value,
-		Deductions:         0,
-		EffectiveDate:      payment.DueDate.Format("2006-01-02"),
-		MunicipalServiceID: payment.BillingType,
-		MunicipalServiceName: func() string {
-			if payload.BillingType != "" {
-				return fmt.Sprintf("Cobrança %s", payload.BillingType)
+		Payment: payment.ID,
+		ServiceDescription: func() string {
+			if payment.Description != "" {
+				return payment.Description
 			}
-			return "Cobrança"
+			return fmt.Sprintf("Pagamento %s", payment.ID)
 		}(),
-		UpdatePayment: true,
+		Observations:         "NOTA FISCAL EMITIDA POR EMPRESA OPTANTE DO SIMPLES NACIONAL CONFORME LEI COMPLEMENTAR 123/2006. NÃO GERA DIREITO A CRÉDITO DE I.P.I./ICMS.",
+		ExternalID:           payment.ID,
+		Value:                payment.Value,
+		Deductions:           0,
+		EffectiveDate:        time.Now().UTC().Format("2006-01-02"),
+		MunicipalServiceCode: "01.03.01",
+		MunicipalServiceName: "Processamento, armazenamento ou hospedagem de dados, textos, imagens, vídeos, páginas eletrônicas, aplicativos e sistemas de informação, entre outros formatos, e congêneres",
+		UpdatePayment:        true,
 		Taxes: InvoiceTaxes{
 			RetainISS: false,
 			Cofins:    0,
@@ -297,7 +296,7 @@ func (s *Service) issueInvoiceForPayment(ctx context.Context, payment PaymentRec
 			INSS:      0,
 			IR:        0,
 			PIS:       0,
-			ISS:       0,
+			ISS:       5,
 		},
 	}
 

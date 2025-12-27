@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -101,29 +102,29 @@ func registerRoutes(mux *http.ServeMux, service *payments.Service, client *payme
 		case http.MethodPost:
 			var payload payments.CustomerRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "invalid payload")
 				return
 			}
 			_, remote, err := service.RegisterCustomer(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
 		case http.MethodGet:
 			id := req.URL.Query().Get("id")
 			if id == "" {
-				http.Error(w, "id is required", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "id is required")
 				return
 			}
 			customer, err := client.GetCustomer(req.Context(), id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			respondJSON(w, customer, http.StatusOK)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 	}
 
@@ -132,29 +133,29 @@ func registerRoutes(mux *http.ServeMux, service *payments.Service, client *payme
 		case http.MethodPost:
 			var payload payments.PaymentRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "invalid payload")
 				return
 			}
 			_, remote, err := service.CreatePayment(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
 		case http.MethodGet:
 			id := req.URL.Query().Get("id")
 			if id == "" {
-				http.Error(w, "id is required", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "id is required")
 				return
 			}
 			payment, err := client.GetPayment(req.Context(), id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			respondJSON(w, payment, http.StatusOK)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 	}
 
@@ -163,33 +164,33 @@ func registerRoutes(mux *http.ServeMux, service *payments.Service, client *payme
 		case http.MethodPost:
 			var payload payments.SubscriptionRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "invalid payload")
 				return
 			}
 			_, remote, err := service.CreateSubscription(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 	}
 
 	subscriptionCancelHandler := func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		id := req.URL.Query().Get("id")
 		if id == "" {
-			http.Error(w, "id is required", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "id is required")
 			return
 		}
 		subscription, err := client.CancelSubscription(req.Context(), id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			respondError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		respondJSON(w, subscription, http.StatusOK)
@@ -200,53 +201,53 @@ func registerRoutes(mux *http.ServeMux, service *payments.Service, client *payme
 		case http.MethodPost:
 			var payload payments.InvoiceRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "invalid payload")
 				return
 			}
 			_, remote, err := service.CreateInvoice(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
 		case http.MethodGet:
 			id := req.URL.Query().Get("id")
 			if id == "" {
-				http.Error(w, "id is required", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "id is required")
 				return
 			}
 			invoice, err := client.GetInvoice(req.Context(), id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			respondJSON(w, invoice, http.StatusOK)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 	}
 
 	webhookHandler := func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 
 		expectedToken := os.Getenv("ASAAS_WEBHOOK_TOKEN")
 		if expectedToken == "" || req.Header.Get("asaas-access-token") != expectedToken {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		payload, err := io.ReadAll(req.Body)
 		if err != nil {
-			http.Error(w, "cannot read body", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "cannot read body")
 			return
 		}
 		defer req.Body.Close()
 
 		if err := service.HandleWebhookPayload(req.Context(), payload); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -281,7 +282,7 @@ func withRecovery(next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("panic recovered: %v", rec)
-				http.Error(w, "internal server error", http.StatusInternalServerError)
+				respondError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -292,6 +293,23 @@ func respondJSON(w http.ResponseWriter, payload any, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		respondError(w, http.StatusInternalServerError, err.Error())
 	}
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(errorResponse{Error: message})
+}
+
+func statusForError(err error) int {
+	if errors.Is(err, sql.ErrNoRows) {
+		return http.StatusNotFound
+	}
+	return http.StatusBadGateway
 }
