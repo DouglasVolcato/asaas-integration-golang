@@ -23,6 +23,18 @@ Opcionalmente crie um arquivo `.env` com as variáveis acima; ele será carregad
 go run ./...
 ```
 
+### Porta PHP
+
+Uma porta em PHP com a mesma API e documentação está disponível em `php/public/index.php`.
+
+```bash
+# gera autoload do Composer (não há dependências externas)
+composer install
+
+# inicia o servidor embutido
+php -S 0.0.0.0:8080 -t php/public
+```
+
 O serviço sobe um HTTP server com rotas JSON sob `/customers`, `/payments`, `/subscriptions`, `/invoices` e `/webhooks/asaas`. Os endpoints utilizam IDs UUID armazenados no banco como referência para o Asaas.
 
 ## Webhooks
