@@ -1,0 +1,12 @@
+{
+  "name": "asaas/integration-php",
+  "description": "Integração Asaas em PHP equivalente à versão Go",
+  "require": {
+    "php": ">=8.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/"
+    }
+  }
+}

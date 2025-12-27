@@ -25,6 +25,18 @@ go run ./...
 
 O serviço sobe um HTTP server com rotas JSON sob `/customers`, `/payments`, `/subscriptions`, `/invoices` e `/webhooks/asaas`. Os endpoints utilizam IDs UUID armazenados no banco como referência para o Asaas.
 
+### Implementação PHP
+
+Uma versão equivalente em PHP está disponível em `php/` com o mesmo Swagger e lógica de webhooks. Para executar:
+
+```bash
+cd php
+composer install
+php -S 0.0.0.0:${PORT:-8080} -t public
+```
+
+Certifique-se de configurar as mesmas variáveis de ambiente usadas pela versão Go (`DATABASE_URL`, `ASAAS_API_URL`, `ASAAS_API_TOKEN`, `ASAAS_WEBHOOK_TOKEN` e `PORT`).
+
 ## Webhooks
 - A rota `/webhooks/asaas` aceita apenas `POST` e exige o header `asaas-access-token` igual a `ASAAS_WEBHOOK_TOKEN`.
 - Eventos `PAYMENT_CREATED` ou pagamentos desconhecidos são ignorados.
