@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -12,8 +13,6 @@ import (
 
 	"asaas/src/payments"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -54,18 +53,12 @@ func main() {
 
 	client := payments.NewAsaasClient(cfg.Asaas)
 	service := payments.NewService(repo, client)
-	webhookHandler := payments.NewWebhookHandler(service)
 
-	router := chi.NewRouter()
-	router.Use(middleware.RequestID)
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
-
-	registerRoutes(router, service, client, webhookHandler)
+	handler := buildHandler(service, client)
 
 	srv := &http.Server{ //nolint:gosec
 		Addr:         ":" + cfg.Port,
-		Handler:      router,
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -96,9 +89,16 @@ func loadConfig() (AppConfig, error) {
 	return AppConfig{Port: port, DatabaseDSN: dsn, Asaas: asaasConfig}, nil
 }
 
-func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.AsaasClient, webhook http.Handler) {
-	r.Route("/customers", func(cr chi.Router) {
-		cr.Post("/", func(w http.ResponseWriter, req *http.Request) {
+func buildHandler(service *payments.Service, client *payments.AsaasClient) http.Handler {
+	mux := http.NewServeMux()
+	registerRoutes(mux, service, client)
+	return withRecovery(withRequestLogging(mux))
+}
+
+func registerRoutes(mux *http.ServeMux, service *payments.Service, client *payments.AsaasClient) {
+	customerHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.CustomerRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -110,9 +110,7 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
-
-		cr.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		case http.MethodGet:
 			id := req.URL.Query().Get("id")
 			if id == "" {
 				http.Error(w, "id is required", http.StatusBadRequest)
@@ -124,11 +122,14 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, customer, http.StatusOK)
-		})
-	})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
 
-	r.Route("/payments", func(pr chi.Router) {
-		pr.Post("/", func(w http.ResponseWriter, req *http.Request) {
+	paymentHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.PaymentRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -140,9 +141,7 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
-
-		pr.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		case http.MethodGet:
 			id := req.URL.Query().Get("id")
 			if id == "" {
 				http.Error(w, "id is required", http.StatusBadRequest)
@@ -154,11 +153,14 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, payment, http.StatusOK)
-		})
-	})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
 
-	r.Route("/subscriptions", func(sr chi.Router) {
-		sr.Post("/", func(w http.ResponseWriter, req *http.Request) {
+	subscriptionHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.SubscriptionRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -170,25 +172,32 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
 
-		sr.Post("/cancel", func(w http.ResponseWriter, req *http.Request) {
-			id := req.URL.Query().Get("id")
-			if id == "" {
-				http.Error(w, "id is required", http.StatusBadRequest)
-				return
-			}
-			subscription, err := client.CancelSubscription(req.Context(), id)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
-				return
-			}
-			respondJSON(w, subscription, http.StatusOK)
-		})
-	})
+	subscriptionCancelHandler := func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := req.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		subscription, err := client.CancelSubscription(req.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		respondJSON(w, subscription, http.StatusOK)
+	}
 
-	r.Route("/invoices", func(ir chi.Router) {
-		ir.Post("/", func(w http.ResponseWriter, req *http.Request) {
+	invoiceHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.InvoiceRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -200,9 +209,7 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
-
-		ir.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		case http.MethodGet:
 			id := req.URL.Query().Get("id")
 			if id == "" {
 				http.Error(w, "id is required", http.StatusBadRequest)
@@ -214,12 +221,71 @@ func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.Asaa
 				return
 			}
 			respondJSON(w, invoice, http.StatusOK)
-		})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+
+	webhookHandler := func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		expectedToken := os.Getenv("ASAAS_WEBHOOK_TOKEN")
+		if expectedToken == "" || req.Header.Get("asaas-access-token") != expectedToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		payload, err := io.ReadAll(req.Body)
+		if err != nil {
+			http.Error(w, "cannot read body", http.StatusBadRequest)
+			return
+		}
+		defer req.Body.Close()
+
+		if err := service.HandleWebhookPayload(req.Context(), payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+
+	mux.HandleFunc("/customers", customerHandler)
+	mux.HandleFunc("/customers/", customerHandler)
+	mux.HandleFunc("/payments", paymentHandler)
+	mux.HandleFunc("/payments/", paymentHandler)
+	mux.HandleFunc("/subscriptions", subscriptionHandler)
+	mux.HandleFunc("/subscriptions/", subscriptionHandler)
+	mux.HandleFunc("/subscriptions/cancel", subscriptionCancelHandler)
+	mux.HandleFunc("/subscriptions/cancel/", subscriptionCancelHandler)
+	mux.HandleFunc("/invoices", invoiceHandler)
+	mux.HandleFunc("/invoices/", invoiceHandler)
+	mux.HandleFunc("/webhooks/asaas", webhookHandler)
+
+	mux.Handle("/swagger/", http.StripPrefix("/swagger/", http.FileServer(http.Dir("swagger"))))
+}
+
+func withRequestLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s completed in %s", r.Method, r.URL.Path, time.Since(start))
 	})
+}
 
-	r.Post("/webhooks/asaas", webhook.ServeHTTP)
-
-	r.Handle("/swagger/*", http.StripPrefix("/swagger/", http.FileServer(http.Dir("swagger"))))
+func withRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic recovered: %v", rec)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 func respondJSON(w http.ResponseWriter, payload any, status int) {
