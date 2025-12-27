@@ -215,13 +215,17 @@ func (s *Service) HandleWebhookNotification(ctx context.Context, event Notificat
 		if event.Payment == nil {
 			return fmt.Errorf("payment payload missing")
 		}
-		if err := s.repo.UpdatePaymentStatus(ctx, event.Payment.ExternalID, event.Payment.Status, event.Payment.InvoiceURL, event.Payment.TransactionReceiptURL); err != nil {
+		payment, err := s.repo.FindPaymentByID(ctx, event.Payment.ExternalID)
+		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
 			}
 			return err
 		}
-		return nil
+		if err := s.repo.UpdatePaymentStatus(ctx, payment.ID, event.Payment.Status, event.Payment.InvoiceURL, event.Payment.TransactionReceiptURL); err != nil {
+			return err
+		}
+		return s.issueInvoiceForPayment(ctx, payment, *event.Payment)
 	case "SUBSCRIPTION_CREATED", "SUBSCRIPTION_UPDATED":
 		if event.Subscription == nil {
 			return fmt.Errorf("subscription payload missing")
@@ -257,4 +261,49 @@ func generateID() string {
 	b[8] = (b[8] & 0x3f) | 0x80
 	encoded := hex.EncodeToString(b)
 	return fmt.Sprintf("%s-%s-%s-%s-%s", encoded[0:8], encoded[8:12], encoded[12:16], encoded[16:20], encoded[20:])
+}
+
+func (s *Service) issueInvoiceForPayment(ctx context.Context, payment PaymentRecord, payload PaymentResponse) error {
+	if _, err := s.repo.FindInvoiceByPaymentID(ctx, payment.ID); err == nil {
+		return nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	description := payment.Description
+	if description == "" {
+		description = fmt.Sprintf("Serviço referente ao pagamento %s", payment.ID)
+	}
+
+	req := InvoiceRequest{
+		Payment:            payment.ID,
+		ServiceDescription: description,
+		Observations:       "",
+		Value:              payment.Value,
+		Deductions:         0,
+		EffectiveDate:      payment.DueDate.Format("2006-01-02"),
+		MunicipalServiceID: payment.BillingType,
+		MunicipalServiceName: func() string {
+			if payload.BillingType != "" {
+				return fmt.Sprintf("Cobrança %s", payload.BillingType)
+			}
+			return "Cobrança"
+		}(),
+		UpdatePayment: true,
+		Taxes: InvoiceTaxes{
+			RetainISS: false,
+			Cofins:    0,
+			Csll:      0,
+			INSS:      0,
+			IR:        0,
+			PIS:       0,
+			ISS:       0,
+		},
+	}
+
+	if _, _, err := s.CreateInvoice(ctx, req); err != nil {
+		return fmt.Errorf("failed to issue invoice for payment %s: %w", payment.ID, err)
+	}
+
+	return nil
 }

@@ -20,6 +20,7 @@ type Repository interface {
 	UpdateSubscriptionStatus(ctx context.Context, id, status string) error
 
 	SaveInvoice(ctx context.Context, invoice InvoiceRecord) error
+	FindInvoiceByPaymentID(ctx context.Context, paymentID string) (InvoiceRecord, error)
 	UpdateInvoiceStatus(ctx context.Context, id, status string) error
 }
 
@@ -407,6 +408,67 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$
 	return err
 }
 
+// FindInvoiceByPaymentID returns the first invoice linked to a payment.
+func (r *PostgresRepository) FindInvoiceByPaymentID(ctx context.Context, paymentID string) (InvoiceRecord, error) {
+	var invoice InvoiceRecord
+	row := r.db.QueryRowContext(ctx, `
+SELECT
+id,
+payment_id,
+service_description,
+observations,
+value,
+deductions,
+effective_date,
+municipal_service_id,
+municipal_service_code,
+municipal_service_name,
+update_payment,
+taxes_retain_iss,
+taxes_cofins,
+taxes_csll,
+taxes_inss,
+taxes_ir,
+taxes_pis,
+taxes_iss,
+status,
+payment_link,
+created_at,
+updated_at
+FROM payment_invoices
+WHERE payment_id = $1
+LIMIT 1
+`, paymentID)
+	if err := row.Scan(
+		&invoice.ID,
+		&invoice.PaymentID,
+		&invoice.ServiceDescription,
+		&invoice.Observations,
+		&invoice.Value,
+		&invoice.Deductions,
+		&invoice.EffectiveDate,
+		&invoice.MunicipalServiceID,
+		&invoice.MunicipalServiceCode,
+		&invoice.MunicipalServiceName,
+		&invoice.UpdatePayment,
+		&invoice.TaxesRetainISS,
+		&invoice.TaxesCofins,
+		&invoice.TaxesCsll,
+		&invoice.TaxesINSS,
+		&invoice.TaxesIR,
+		&invoice.TaxesPIS,
+		&invoice.TaxesISS,
+		&invoice.Status,
+		&invoice.PaymentLink,
+		&invoice.CreatedAt,
+		&invoice.UpdatedAt,
+	); err != nil {
+		return InvoiceRecord{}, err
+	}
+
+	return invoice, nil
+}
+
 // UpdateInvoiceStatus updates invoice status locally.
 func (r *PostgresRepository) UpdateInvoiceStatus(ctx context.Context, id, status string) error {
 	result, err := r.db.ExecContext(ctx, `UPDATE payment_invoices SET status=$1, updated_at=$2 WHERE id=$3`, status, time.Now().UTC(), id)
@@ -493,6 +555,16 @@ func (r *InMemoryRepository) UpdateSubscriptionStatus(_ context.Context, id, sta
 func (r *InMemoryRepository) SaveInvoice(_ context.Context, invoice InvoiceRecord) error {
 	r.invoices[invoice.ID] = invoice
 	return nil
+}
+
+// FindInvoiceByPaymentID returns the first invoice linked to a payment.
+func (r *InMemoryRepository) FindInvoiceByPaymentID(_ context.Context, paymentID string) (InvoiceRecord, error) {
+	for _, inv := range r.invoices {
+		if inv.PaymentID == paymentID {
+			return inv, nil
+		}
+	}
+	return InvoiceRecord{}, sql.ErrNoRows
 }
 
 func (r *InMemoryRepository) UpdateInvoiceStatus(_ context.Context, id, status string) error {
