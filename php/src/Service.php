@@ -45,12 +45,7 @@ class Service
 
     public function createPayment(array $payload): array
     {
-        $customerId = $payload['customer'] ?? '';
-        if ($customerId === '') {
-            throw new RuntimeException('customer é obrigatório');
-        }
-
-        $customer = $this->repo->findCustomerById($customerId);
+        $customer = $this->repo->findCustomerById($payload['customer'] ?? '');
         $remoteCustomer = $this->client->getCustomer($customer->id);
 
         $localId = self::generateId();
@@ -91,11 +86,7 @@ class Service
 
     public function createSubscription(array $payload): array
     {
-        $customerId = $payload['customer'] ?? '';
-        if ($customerId === '') {
-            throw new RuntimeException('customer é obrigatório');
-        }
-        $customer = $this->repo->findCustomerById($customerId);
+        $customer = $this->repo->findCustomerById($payload['customer'] ?? '');
         $remoteCustomer = $this->client->getCustomer($customer->id);
 
         $localId = self::generateId();
@@ -125,11 +116,7 @@ class Service
 
     public function createInvoice(array $payload): array
     {
-        $paymentId = $payload['payment'] ?? '';
-        if ($paymentId === '') {
-            throw new RuntimeException('payment é obrigatório');
-        }
-        $payment = $this->repo->findPaymentById($paymentId);
+        $payment = $this->repo->findPaymentById($payload['payment'] ?? '');
         $remotePayment = $this->client->getPayment($payment->id);
 
         $localId = $payload['externalReference'] ?? '';
@@ -142,6 +129,8 @@ class Service
         $remote = $this->client->createInvoice($asaasPayload);
 
         $now = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $taxes = is_array($payload['taxes'] ?? null) ? $payload['taxes'] : [];
+
         $invoice = new InvoiceRecord(
             $localId,
             $payment->id,
@@ -154,13 +143,13 @@ class Service
             $payload['municipalServiceCode'] ?? '',
             $payload['municipalServiceName'] ?? '',
             (bool)($payload['updatePayment'] ?? false),
-            (bool)($payload['taxes']['retainIss'] ?? false),
-            (float)($payload['taxes']['cofins'] ?? 0),
-            (float)($payload['taxes']['csll'] ?? 0),
-            (float)($payload['taxes']['inss'] ?? 0),
-            (float)($payload['taxes']['ir'] ?? 0),
-            (float)($payload['taxes']['pis'] ?? 0),
-            (float)($payload['taxes']['iss'] ?? 0),
+            (bool)($taxes['retainIss'] ?? false),
+            (float)($taxes['cofins'] ?? 0),
+            (float)($taxes['csll'] ?? 0),
+            (float)($taxes['inss'] ?? 0),
+            (float)($taxes['ir'] ?? 0),
+            (float)($taxes['pis'] ?? 0),
+            (float)($taxes['iss'] ?? 0),
             $remote['status'] ?? '',
             $remote['paymentLink'] ?? '',
             $now,
@@ -257,10 +246,8 @@ class Service
             try {
                 $this->repo->findPaymentById($paymentPayload['externalReference']);
                 return;
-            } catch (RuntimeException $e) {
-                if ($e->getMessage() !== 'not found') {
-                    throw $e;
-                }
+            } catch (NotFoundException) {
+                // create below
             }
         }
 
@@ -271,11 +258,8 @@ class Service
 
         try {
             $localSubscription = $this->repo->findSubscriptionById($subscription['externalReference']);
-        } catch (RuntimeException $e) {
-            if ($e->getMessage() === 'not found') {
-                return;
-            }
-            throw $e;
+        } catch (NotFoundException) {
+            return;
         }
 
         $localId = self::generateId();
@@ -311,11 +295,8 @@ class Service
         }
         try {
             $payment = $this->repo->findPaymentById($externalRef);
-        } catch (RuntimeException $e) {
-            if ($e->getMessage() === 'not found') {
-                return;
-            }
-            throw $e;
+        } catch (NotFoundException) {
+            return;
         }
 
         $this->repo->updatePaymentStatus($payment->id, $paymentPayload['status'] ?? '', $paymentPayload['invoiceUrl'] ?? '', $paymentPayload['transactionReceiptUrl'] ?? '');
@@ -327,10 +308,8 @@ class Service
         try {
             $this->repo->findInvoiceByPaymentId($payment->id);
             return;
-        } catch (RuntimeException $e) {
-            if ($e->getMessage() !== 'not found') {
-                throw $e;
-            }
+        } catch (NotFoundException) {
+            // continue issuing invoice
         }
 
         $req = [

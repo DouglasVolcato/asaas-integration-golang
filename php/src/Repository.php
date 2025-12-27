@@ -124,7 +124,7 @@ class Repository
         $stmt->execute([':id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            throw new RuntimeException('not found');
+            throw new NotFoundException('not found');
         }
         return new CustomerRecord(
             $row['id'],
@@ -180,7 +180,7 @@ class Repository
             ':id' => $id,
         ]);
         if ($stmt->rowCount() === 0) {
-            throw new RuntimeException('not found');
+            throw new NotFoundException('not found');
         }
     }
 
@@ -190,7 +190,7 @@ class Repository
         $stmt->execute([':id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            throw new RuntimeException('not found');
+            throw new NotFoundException('not found');
         }
         return new PaymentRecord(
             $row['id'],
@@ -238,7 +238,7 @@ class Repository
         $stmt->execute([':id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            throw new RuntimeException('not found');
+            throw new NotFoundException('not found');
         }
         return new SubscriptionRecord(
             $row['id'],
@@ -265,7 +265,7 @@ class Repository
             ':id' => $id,
         ]);
         if ($stmt->rowCount() === 0) {
-            throw new RuntimeException('not found');
+            throw new NotFoundException('not found');
         }
     }
 
@@ -306,7 +306,7 @@ class Repository
         $stmt->execute([':paymentId' => $paymentId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            throw new RuntimeException('not found');
+            throw new NotFoundException('not found');
         }
         return new InvoiceRecord(
             $row['id'],
@@ -343,7 +343,7 @@ class Repository
             ':id' => $id,
         ]);
         if ($stmt->rowCount() === 0) {
-            throw new RuntimeException('not found');
+            throw new NotFoundException('not found');
         }
     }
 }

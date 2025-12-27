@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use App\{Env, Config, Database, Repository, AsaasClient, Service};
+use App\{Env, Config, Database, Repository, AsaasClient, Service, BadRequestException, NotFoundException};
 
 Env::load();
 
@@ -42,10 +42,13 @@ function jsonInput(): array
 {
     $raw = file_get_contents('php://input');
     if ($raw === false || trim($raw) === '') {
-        return [];
+        throw new BadRequestException('payload inválido');
     }
     $data = json_decode($raw, true);
-    return is_array($data) ? $data : [];
+    if (!is_array($data)) {
+        throw new BadRequestException('payload inválido');
+    }
+    return $data;
 }
 
 function respond(mixed $payload, int $status = 200): void
@@ -147,15 +150,24 @@ try {
                 respond(['error' => 'payload inválido'], 400);
                 break;
             }
-            $service->handleWebhook($data);
+            try {
+                $service->handleWebhook($data);
+            } catch (Throwable $e) {
+                respond(['error' => $e->getMessage()], 400);
+                break;
+            }
             respond(['status' => 'ok'], 200);
             break;
         default:
             respond(['error' => 'rota não encontrada'], 404);
             break;
     }
-} catch (RuntimeException $e) {
+} catch (BadRequestException $e) {
     respond(['error' => $e->getMessage()], 400);
+} catch (NotFoundException $e) {
+    respond(['error' => $e->getMessage()], 404);
+} catch (RuntimeException $e) {
+    respond(['error' => $e->getMessage()], 502);
 } catch (Throwable $e) {
     respond(['error' => $e->getMessage()], 502);
 }
