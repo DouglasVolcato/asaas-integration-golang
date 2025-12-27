@@ -1,6 +1,7 @@
+customer:
 {
-  "name": "João Teste",
-  "email": "joaoteste@email.com",
+  "name": "Douglas Volcato",
+  "email": "douglasvolcato@gmail.com",
   "cpfCnpj": "03892696039",
   "mobilePhone": "51999772868",
   "address": "Anita Garibaldi",
@@ -8,36 +9,36 @@
   "complement": "apartamento 801",
   "province": "Porto Alegre",
   "postalCode": "90450001",
-  "externalReference": "1",
   "notificationDisabled": true
 }
 
+payment:
 {
-  "customer": "1",
+  "customer": {id},
   "billingType": "UNDEFINED",
   "value": 100,
   "dueDate": "2025-12-27",
   "description": "Pagamento teste",
   "installmentCount": 0,
-  "externalReference": "1",
   "callback": {
-    "successUrl": "https://volcatosistemas.com/metrics",
+    "successUrl": "https://volcatosistemas.com",
     "autoRedirect": true
   }
 }
 
+subscription:
 {
-  "customer": "1",
+  "customer": {id},
   "billingType": "UNDEFINED",
   "value": 50,
   "nextDueDate": "2025-12-27",
   "cycle": "MONTHLY",
-  "externalReference": "1",
   "description": "Cobrança teste"
 }
 
+invoice:
 {
-  "payment": "1",
+  "payment": {id},
   "serviceDescription": "Teste descrição",
   "observations": "NOTA FISCAL EMITIDA POR EMPRESA OPTANTE DO SIMPLES NACIONAL CONFORME LEI COMPLEMENTAR 123/2006. NÃO GERA DIREITO A CRÉDITO DE I.P.I./ICMS.",
   "externalReference": "1",

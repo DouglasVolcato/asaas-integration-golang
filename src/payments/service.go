@@ -45,11 +45,11 @@ func (s *Service) RegisterCustomer(ctx context.Context, req CustomerRequest) (Cu
 
 	remote, err := s.client.CreateCustomer(ctx, req)
 	if err != nil {
-		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to create asaas customer: %w", err)
+		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("falha ao criar cliente no Asaas: %w", err)
 	}
 
 	if err := s.repo.SaveCustomer(ctx, local); err != nil {
-		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("failed to save local customer: %w", err)
+		return CustomerRecord{}, CustomerResponse{}, fmt.Errorf("falha ao salvar cliente local: %w", err)
 	}
 
 	return local, remote, nil
@@ -59,12 +59,12 @@ func (s *Service) RegisterCustomer(ctx context.Context, req CustomerRequest) (Cu
 func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (PaymentRecord, PaymentResponse, error) {
 	customer, err := s.repo.FindCustomerByID(ctx, req.Customer)
 	if err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to resolve customer %s: %w", req.Customer, err)
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("falha ao localizar cliente %s: %w", req.Customer, err)
 	}
 
 	remoteCustomer, err := s.client.GetCustomer(ctx, customer.ID)
 	if err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to fetch asaas customer for id %s:%w", req.Customer, err)
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("falha ao buscar cliente no Asaas para id %s: %w", req.Customer, err)
 	}
 
 	localID := generateID()
@@ -73,7 +73,7 @@ func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (Paymen
 	asaasReq.Customer = remoteCustomer.ID
 	remote, err := s.client.CreatePayment(ctx, asaasReq)
 	if err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to create asaas payment: %w", err)
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("falha ao criar pagamento no Asaas: %w", err)
 	}
 
 	callbackSuccessURL := ""
@@ -102,7 +102,7 @@ func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (Paymen
 	}
 
 	if err := s.repo.SavePayment(ctx, local); err != nil {
-		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("failed to save local payment: %w", err)
+		return PaymentRecord{}, PaymentResponse{}, fmt.Errorf("falha ao salvar pagamento local: %w", err)
 	}
 
 	return local, remote, nil
@@ -112,12 +112,12 @@ func (s *Service) CreatePayment(ctx context.Context, req PaymentRequest) (Paymen
 func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionRequest) (SubscriptionRecord, SubscriptionResponse, error) {
 	customer, err := s.repo.FindCustomerByID(ctx, req.Customer)
 	if err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to resolve customer %s: %w", req.Customer, err)
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("falha ao localizar cliente %s: %w", req.Customer, err)
 	}
 
 	remoteCustomer, err := s.client.GetCustomer(ctx, customer.ID)
 	if err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to fetch asaas customer for id %s: %w", req.Customer, err)
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("falha ao buscar cliente no Asaas para id %s: %w", req.Customer, err)
 	}
 
 	localID := generateID()
@@ -126,7 +126,7 @@ func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionReques
 	asaasReq.Customer = remoteCustomer.ID
 	remote, err := s.client.CreateSubscription(ctx, asaasReq)
 	if err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to create asaas subscription: %w", err)
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("falha ao criar assinatura no Asaas: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -146,7 +146,7 @@ func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionReques
 	}
 
 	if err := s.repo.SaveSubscription(ctx, local); err != nil {
-		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("failed to save local subscription: %w", err)
+		return SubscriptionRecord{}, SubscriptionResponse{}, fmt.Errorf("falha ao salvar assinatura local: %w", err)
 	}
 
 	return local, remote, nil
@@ -156,12 +156,12 @@ func (s *Service) CreateSubscription(ctx context.Context, req SubscriptionReques
 func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (InvoiceRecord, InvoiceResponse, error) {
 	payment, err := s.repo.FindPaymentByID(ctx, req.Payment)
 	if err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to resolve payment %s: %w", req.Payment, err)
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("falha ao localizar pagamento %s: %w", req.Payment, err)
 	}
 
 	remotePayment, err := s.client.GetPayment(ctx, payment.ID)
 	if err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to fetch asaas payment for id %s: %w", req.Payment, err)
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("falha ao buscar pagamento no Asaas para id %s: %w", req.Payment, err)
 	}
 
 	localID := req.ExternalID
@@ -173,7 +173,7 @@ func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (Invoic
 	asaasReq.Payment = remotePayment.ID
 	remote, err := s.client.CreateInvoice(ctx, asaasReq)
 	if err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to create asaas invoice: %w", err)
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("falha ao criar nota fiscal no Asaas: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -203,7 +203,7 @@ func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (Invoic
 	}
 
 	if err := s.repo.SaveInvoice(ctx, local); err != nil {
-		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("failed to save local invoice: %w", err)
+		return InvoiceRecord{}, InvoiceResponse{}, fmt.Errorf("falha ao salvar nota fiscal local: %w", err)
 	}
 
 	return local, remote, nil
@@ -213,12 +213,72 @@ func (s *Service) CreateInvoice(ctx context.Context, req InvoiceRequest) (Invoic
 func (s *Service) HandleWebhookNotification(ctx context.Context, event NotificationEvent) error {
 	switch event.Event {
 	case "PAYMENT_CREATED":
-		return nil
-	case "PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_OVERDUE":
 		if event.Payment == nil {
-			return fmt.Errorf("payment payload missing")
+			return fmt.Errorf("payload de pagamento ausente")
 		}
-		payment, err := s.repo.FindPaymentByID(ctx, event.Payment.ExternalID)
+		if event.Payment.Subscription == "" {
+			return nil
+		}
+		if event.Payment.ExternalReference != "" {
+			if _, err := s.repo.FindPaymentByID(ctx, event.Payment.ExternalReference); err == nil {
+				return nil
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
+
+		subscription, err := s.client.GetSubscriptionByID(ctx, event.Payment.Subscription)
+		if err != nil {
+			return fmt.Errorf("falha ao buscar assinatura %s: %w", event.Payment.Subscription, err)
+		}
+		if subscription.ExternalID == "" {
+			return fmt.Errorf("externalReference da assinatura ausente para id %s", event.Payment.Subscription)
+		}
+
+		localSubscription, err := s.repo.FindSubscriptionByID(ctx, subscription.ExternalID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+
+		localID := generateID()
+		now := time.Now().UTC()
+		localPayment := PaymentRecord{
+			ID:                    localID,
+			CustomerID:            localSubscription.CustomerID,
+			SubscriptionID:        localSubscription.ID,
+			BillingType:           event.Payment.BillingType,
+			Value:                 event.Payment.Value,
+			DueDate:               parseDate(event.Payment.DueDate),
+			Description:           event.Payment.Description,
+			InstallmentCount:      0,
+			CallbackSuccessURL:    "",
+			CallbackAutoRedirect:  false,
+			Status:                event.Payment.Status,
+			InvoiceURL:            event.Payment.InvoiceURL,
+			TransactionReceiptURL: event.Payment.TransactionReceiptURL,
+			CreatedAt:             now,
+			UpdatedAt:             now,
+		}
+
+		if err := s.repo.SavePayment(ctx, localPayment); err != nil {
+			return fmt.Errorf("falha ao salvar pagamento local: %w", err)
+		}
+		if event.Payment.ID != "" && event.Payment.ExternalReference != localID {
+			if err := s.client.UpdatePaymentExternalReference(ctx, event.Payment.ID, localID); err != nil {
+				return fmt.Errorf("falha ao atualizar externalReference do pagamento: %w", err)
+			}
+		}
+		return nil
+	case "INVOICE_CREATED", "SUBSCRIPTION_CREATED":
+		return nil
+	case "PAYMENT_AUTHORIZED", "PAYMENT_APPROVED_BY_RISK_ANALYSIS", "PAYMENT_CONFIRMED", "PAYMENT_ANTICIPATED", "PAYMENT_DELETED", "PAYMENT_REFUNDED", "PAYMENT_REFUND_DENIED", "PAYMENT_CHARGEBACK_REQUESTED", "PAYMENT_AWAITING_CHARGEBACK_REVERSAL", "PAYMENT_DUNNING_REQUESTED", "PAYMENT_CHECKOUT_VIEWED", "PAYMENT_PARTIALLY_REFUNDED", "PAYMENT_SPLIT_DIVERGENCE_BLOCK", "PAYMENT_AWAITING_RISK_ANALYSIS", "PAYMENT_REPROVED_BY_RISK_ANALYSIS", "PAYMENT_UPDATED", "PAYMENT_RECEIVED", "PAYMENT_OVERDUE", "PAYMENT_RESTORED", "PAYMENT_REFUND_IN_PROGRESS", "PAYMENT_RECEIVED_IN_CASH_UNDONE", "PAYMENT_CHARGEBACK_DISPUTE", "PAYMENT_DUNNING_RECEIVED", "PAYMENT_BANK_SLIP_VIEWED", "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED", "PAYMENT_SPLIT_CANCELLED", "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED":
+		if event.Payment == nil {
+			return fmt.Errorf("payload de pagamento ausente")
+		}
+		payment, err := s.repo.FindPaymentByID(ctx, event.Payment.ExternalReference)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
@@ -229,18 +289,18 @@ func (s *Service) HandleWebhookNotification(ctx context.Context, event Notificat
 			return err
 		}
 		return s.issueInvoiceForPayment(ctx, payment, *event.Payment)
-	case "SUBSCRIPTION_CREATED", "SUBSCRIPTION_UPDATED":
+	case "SUBSCRIPTION_INACTIVATED", "SUBSCRIPTION_SPLIT_DISABLED", "SUBSCRIPTION_SPLIT_DIVERGENCE_BLOCK_FINISHED", "SUBSCRIPTION_UPDATED", "SUBSCRIPTION_DELETED", "SUBSCRIPTION_SPLIT_DIVERGENCE_BLOCK":
 		if event.Subscription == nil {
-			return fmt.Errorf("subscription payload missing")
+			return fmt.Errorf("payload de assinatura ausente")
 		}
 		return s.repo.UpdateSubscriptionStatus(ctx, event.Subscription.ExternalID, event.Subscription.Status)
-	case "INVOICE_CREATED", "INVOICE_UPDATED", "INVOICE_OVERDUE":
+	case "INVOICE_SYNCHRONIZED", "INVOICE_PROCESSING_CANCELLATION", "INVOICE_CANCELLATION_DENIED", "INVOICE_UPDATED", "INVOICE_AUTHORIZED", "INVOICE_CANCELED", "INVOICE_ERROR":
 		if event.Invoice == nil {
-			return fmt.Errorf("invoice payload missing")
+			return fmt.Errorf("payload de nota fiscal ausente")
 		}
 		return s.repo.UpdateInvoiceStatus(ctx, event.Invoice.ExternalID, event.Invoice.Status)
 	default:
-		return fmt.Errorf("unsupported event type: %s", event.Event)
+		return fmt.Errorf("tipo de evento não suportado: %s", event.Event)
 	}
 }
 
@@ -301,7 +361,7 @@ func (s *Service) issueInvoiceForPayment(ctx context.Context, payment PaymentRec
 	}
 
 	if _, _, err := s.CreateInvoice(ctx, req); err != nil {
-		return fmt.Errorf("failed to issue invoice for payment %s: %w", payment.ID, err)
+		return fmt.Errorf("falha ao emitir nota fiscal para o pagamento %s: %w", payment.ID, err)
 	}
 
 	return nil

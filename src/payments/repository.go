@@ -40,6 +40,7 @@ cpfCnpj TEXT DEFAULT '',
 		`CREATE TABLE IF NOT EXISTS payment_payments (
 id UUID PRIMARY KEY,
 customer_id UUID NOT NULL REFERENCES payment_customers(id),
+subscription_id UUID DEFAULT NULL,
 billing_type TEXT NOT NULL,
 value NUMERIC NOT NULL,
 due_date TIMESTAMPTZ NOT NULL,
@@ -53,6 +54,7 @@ due_date TIMESTAMPTZ NOT NULL,
             created_at TIMESTAMPTZ NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL
 );`,
+		`ALTER TABLE payment_payments ADD COLUMN IF NOT EXISTS subscription_id UUID;`,
 		`CREATE TABLE IF NOT EXISTS payment_subscriptions (
 id UUID PRIMARY KEY,
 customer_id UUID NOT NULL REFERENCES payment_customers(id),
@@ -95,7 +97,7 @@ observations TEXT NOT NULL,
 
 	for _, stmt := range stmts {
 		if _, err := r.db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("schema migration failed: %w", err)
+			return fmt.Errorf("falha na migra\u00e7\u00e3o do schema: %w", err)
 		}
 	}
 	return nil
@@ -189,10 +191,15 @@ WHERE id = $1
 
 // SavePayment inserts a new payment row.
 func (r *PostgresRepository) SavePayment(ctx context.Context, payment PaymentRecord) error {
+	var subscriptionID any
+	if payment.SubscriptionID != "" {
+		subscriptionID = payment.SubscriptionID
+	}
 	_, err := r.db.ExecContext(ctx, `
 INSERT INTO payment_payments (
 id,
 customer_id,
+subscription_id,
 billing_type,
 value,
 due_date,
@@ -206,10 +213,11 @@ transaction_receipt_url,
 created_at,
 updated_at
 )
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 `,
 		payment.ID,
 		payment.CustomerID,
+		subscriptionID,
 		payment.BillingType,
 		payment.Value,
 		payment.DueDate,
@@ -253,6 +261,7 @@ func (r *PostgresRepository) FindPaymentByID(ctx context.Context, id string) (Pa
 SELECT
 id,
 customer_id,
+subscription_id,
 billing_type,
 value,
 due_date,
@@ -268,9 +277,11 @@ updated_at
 FROM payment_payments
 WHERE id = $1
 `, id)
+	var subscriptionID sql.NullString
 	if err := row.Scan(
 		&payment.ID,
 		&payment.CustomerID,
+		&subscriptionID,
 		&payment.BillingType,
 		&payment.Value,
 		&payment.DueDate,
@@ -285,6 +296,9 @@ WHERE id = $1
 		&payment.UpdatedAt,
 	); err != nil {
 		return PaymentRecord{}, err
+	}
+	if subscriptionID.Valid {
+		payment.SubscriptionID = subscriptionID.String
 	}
 	return payment, nil
 }
@@ -322,6 +336,45 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		subscription.UpdatedAt,
 	)
 	return err
+}
+
+// FindSubscriptionByID returns a subscription record by ID.
+func (r *PostgresRepository) FindSubscriptionByID(ctx context.Context, id string) (SubscriptionRecord, error) {
+	var subscription SubscriptionRecord
+	row := r.db.QueryRowContext(ctx, `
+SELECT
+id,
+customer_id,
+billing_type,
+status,
+value,
+cycle,
+next_due_date,
+description,
+end_date,
+max_payments,
+created_at,
+updated_at
+FROM payment_subscriptions
+WHERE id = $1
+`, id)
+	if err := row.Scan(
+		&subscription.ID,
+		&subscription.CustomerID,
+		&subscription.BillingType,
+		&subscription.Status,
+		&subscription.Value,
+		&subscription.Cycle,
+		&subscription.NextDueDate,
+		&subscription.Description,
+		&subscription.EndDate,
+		&subscription.MaxPayments,
+		&subscription.CreatedAt,
+		&subscription.UpdatedAt,
+	); err != nil {
+		return SubscriptionRecord{}, err
+	}
+	return subscription, nil
 }
 
 // UpdateSubscriptionStatus updates the subscription status locally.

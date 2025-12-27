@@ -82,7 +82,10 @@ type PaymentResponse struct {
 	BillingType           string  `json:"billingType"`
 	Value                 float64 `json:"value"`
 	Status                string  `json:"status"`
-	ExternalID            string  `json:"externalReference"`
+	Description           string  `json:"description,omitempty"`
+	DueDate               string  `json:"dueDate,omitempty"`
+	ExternalReference     string  `json:"externalReference"`
+	Subscription          string  `json:"subscription,omitempty"`
 	InvoiceURL            string  `json:"invoiceUrl,omitempty"`
 	TransactionReceiptURL string  `json:"transactionReceiptUrl,omitempty"`
 }
@@ -165,6 +168,23 @@ type NotificationEvent struct {
 	Subscription *SubscriptionResponse `json:"subscription,omitempty"`
 }
 
+type AsaasError struct {
+	StatusCode  int
+	Code        string
+	Description string
+	Raw         string
+}
+
+func (e *AsaasError) Error() string {
+	if strings.TrimSpace(e.Description) != "" {
+		return e.Description
+	}
+	if strings.TrimSpace(e.Raw) != "" {
+		return fmt.Sprintf("erro do Asaas %d: %s", e.StatusCode, e.Raw)
+	}
+	return fmt.Sprintf("erro do Asaas %d", e.StatusCode)
+}
+
 func (c *AsaasClient) doRequest(ctx context.Context, method, endpoint string, payload any, v any) error {
 	return c.doRequestWithQuery(ctx, method, endpoint, nil, payload, v)
 }
@@ -172,7 +192,7 @@ func (c *AsaasClient) doRequest(ctx context.Context, method, endpoint string, pa
 func (c *AsaasClient) doRequestWithQuery(ctx context.Context, method, endpoint string, query url.Values, payload any, v any) error {
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
-		return fmt.Errorf("invalid base URL: %w", err)
+		return fmt.Errorf("URL base inv\u00e1lida: %w", err)
 	}
 	pathPart, rawQuery, hasQuery := strings.Cut(endpoint, "?")
 	base.Path = path.Join(base.Path, pathPart)
@@ -191,14 +211,14 @@ func (c *AsaasClient) doRequestWithQuery(ctx context.Context, method, endpoint s
 	if payload != nil {
 		data, err := json.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("failed to marshal payload: %w", err)
+			return fmt.Errorf("falha ao serializar payload: %w", err)
 		}
 		body = bytes.NewBuffer(data)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, base.String(), body)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("falha ao criar requisi\u00e7\u00e3o: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("accept", "application/json")
@@ -206,13 +226,31 @@ func (c *AsaasClient) doRequestWithQuery(ctx context.Context, method, endpoint s
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return fmt.Errorf("falha na requisi\u00e7\u00e3o: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("asaas error %d: %s", resp.StatusCode, string(respBody))
+		var asaasError struct {
+			Errors []struct {
+				Code        string `json:"code"`
+				Description string `json:"description"`
+			} `json:"errors"`
+		}
+		if err := json.Unmarshal(respBody, &asaasError); err == nil {
+			if len(asaasError.Errors) > 0 && strings.TrimSpace(asaasError.Errors[0].Description) != "" {
+				return &AsaasError{
+					StatusCode:  resp.StatusCode,
+					Code:        asaasError.Errors[0].Code,
+					Description: asaasError.Errors[0].Description,
+				}
+			}
+		}
+		return &AsaasError{
+			StatusCode: resp.StatusCode,
+			Raw:        string(respBody),
+		}
 	}
 
 	if v == nil {
@@ -221,7 +259,7 @@ func (c *AsaasClient) doRequestWithQuery(ctx context.Context, method, endpoint s
 
 	decoder := json.NewDecoder(resp.Body)
 	if err := decoder.Decode(v); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
+		return fmt.Errorf("falha ao decodificar resposta: %w", err)
 	}
 	return nil
 }
@@ -243,7 +281,7 @@ func (c *AsaasClient) GetCustomer(ctx context.Context, id string) (CustomerRespo
 		return CustomerResponse{}, err
 	}
 	if len(resp.Data) == 0 {
-		return CustomerResponse{}, fmt.Errorf("customer not found for externalReference=%s", id)
+		return CustomerResponse{}, fmt.Errorf("cliente n\u00e3o encontrado para externalReference=%s", id)
 	}
 	return resp.Data[0], nil
 }
@@ -265,9 +303,18 @@ func (c *AsaasClient) GetPayment(ctx context.Context, id string) (PaymentRespons
 		return PaymentResponse{}, err
 	}
 	if len(resp.Data) == 0 {
-		return PaymentResponse{}, fmt.Errorf("payment not found for externalReference=%s", id)
+		return PaymentResponse{}, fmt.Errorf("pagamento n\u00e3o encontrado para externalReference=%s", id)
 	}
 	return resp.Data[0], nil
+}
+
+// UpdatePaymentExternalReference updates the external reference for a payment.
+func (c *AsaasClient) UpdatePaymentExternalReference(ctx context.Context, id, externalReference string) error {
+	payload := struct {
+		ExternalReference string `json:"externalReference"`
+	}{ExternalReference: externalReference}
+	endpoint := path.Join("payments", id)
+	return c.doRequest(ctx, http.MethodPost, endpoint, payload, nil)
 }
 
 // CreateSubscription creates a recurring subscription.
@@ -287,9 +334,17 @@ func (c *AsaasClient) GetSubscription(ctx context.Context, externalReference str
 		return SubscriptionResponse{}, err
 	}
 	if len(resp.Data) == 0 {
-		return SubscriptionResponse{}, fmt.Errorf("subscription not found for externalReference=%s", externalReference)
+		return SubscriptionResponse{}, fmt.Errorf("assinatura n\u00e3o encontrada para externalReference=%s", externalReference)
 	}
 	return resp.Data[0], nil
+}
+
+// GetSubscriptionByID retrieves a subscription by its Asaas ID.
+func (c *AsaasClient) GetSubscriptionByID(ctx context.Context, id string) (SubscriptionResponse, error) {
+	var resp SubscriptionResponse
+	endpoint := path.Join("subscriptions", id)
+	err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &resp)
+	return resp, err
 }
 
 // CancelSubscription cancels a subscription in Asaas.
@@ -321,7 +376,7 @@ func (c *AsaasClient) GetInvoice(ctx context.Context, externalReference string) 
 		return InvoiceResponse{}, err
 	}
 	if len(resp.Data) == 0 {
-		return InvoiceResponse{}, fmt.Errorf("invoice not found for externalReference=%s", externalReference)
+		return InvoiceResponse{}, fmt.Errorf("nota fiscal n\u00e3o encontrada para externalReference=%s", externalReference)
 	}
 	return resp.Data[0], nil
 }

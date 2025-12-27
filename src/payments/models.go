@@ -25,6 +25,7 @@ type CustomerRecord struct {
 type PaymentRecord struct {
 	ID                    string
 	CustomerID            string
+	SubscriptionID        string
 	BillingType           string
 	Value                 float64
 	DueDate               time.Time

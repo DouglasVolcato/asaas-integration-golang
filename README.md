@@ -30,33 +30,5 @@ O serviço sobe um HTTP server com rotas JSON sob `/customers`, `/payments`, `/s
 - Eventos `PAYMENT_CREATED` ou pagamentos desconhecidos são ignorados.
 - Eventos de pagamento recebido/confirmado/atrasado atualizam o status local e disparam emissão de nota fiscal se ainda não existir.
 
-### Notas fiscais automáticas
-Para pagamentos com status atualizado via webhook e ainda sem nota, é enviada ao Asaas a seguinte estrutura padrão (com os valo
-res dinâmicos entre chaves):
-
-```json
-{
-  "payment": "{id do pagamento}",
-  "serviceDescription": "{descrição do pagamento}",
-  "observations": "NOTA FISCAL EMITIDA POR EMPRESA OPTANTE DO SIMPLES NACIONAL CONFORME LEI COMPLEMENTAR 123/2006. NÃO GERA DIREITO A CRÉDITO DE I.P.I./ICMS.",
-  "externalReference": "{referencia externa do pagamento}",
-  "value": {valor do pagamento},
-  "deductions": 0,
-  "effectiveDate": "{data de hoje (yyyy-mm-dd)}",
-  "municipalServiceCode": "01.03.01",
-  "municipalServiceName": "Processamento, armazenamento ou hospedagem de dados, textos, imagens, vídeos, páginas eletrônicas, aplicativos e sistemas de informação, entre outros formatos, e congêneres",
-  "updatePayment": true,
-  "taxes": {
-    "retainIss": false,
-    "cofins": 0,
-    "csll": 0,
-    "inss": 0,
-    "ir": 0,
-    "pis": 0,
-    "iss": 5
-  }
-}
-```
-
 ## Swagger
 A documentação OpenAPI está disponível em `/swagger/` quando o servidor está rodando.
