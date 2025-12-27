@@ -7,23 +7,6 @@ import (
 	"time"
 )
 
-// Repository defines storage operations required by the service layer.
-type Repository interface {
-	SaveCustomer(ctx context.Context, customer CustomerRecord) error
-	FindCustomerByID(ctx context.Context, id string) (CustomerRecord, error)
-
-	SavePayment(ctx context.Context, payment PaymentRecord) error
-	UpdatePaymentStatus(ctx context.Context, id, status, invoiceURL, receiptURL string) error
-	FindPaymentByID(ctx context.Context, id string) (PaymentRecord, error)
-
-	SaveSubscription(ctx context.Context, subscription SubscriptionRecord) error
-	UpdateSubscriptionStatus(ctx context.Context, id, status string) error
-
-	SaveInvoice(ctx context.Context, invoice InvoiceRecord) error
-	FindInvoiceByPaymentID(ctx context.Context, paymentID string) (InvoiceRecord, error)
-	UpdateInvoiceStatus(ctx context.Context, id, status string) error
-}
-
 // PostgresRepository persists data in a PostgreSQL database.
 type PostgresRepository struct {
 	db *sql.DB
@@ -478,101 +461,5 @@ func (r *PostgresRepository) UpdateInvoiceStatus(ctx context.Context, id, status
 	if rows, rowsErr := result.RowsAffected(); rowsErr == nil && rows == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
-}
-
-// InMemoryRepository is a testing implementation that keeps data in memory.
-type InMemoryRepository struct {
-	customers     map[string]CustomerRecord
-	payments      map[string]PaymentRecord
-	subscriptions map[string]SubscriptionRecord
-	invoices      map[string]InvoiceRecord
-}
-
-// NewInMemoryRepository creates an in-memory storage for tests.
-func NewInMemoryRepository() *InMemoryRepository {
-	return &InMemoryRepository{
-		customers:     make(map[string]CustomerRecord),
-		payments:      make(map[string]PaymentRecord),
-		subscriptions: make(map[string]SubscriptionRecord),
-		invoices:      make(map[string]InvoiceRecord),
-	}
-}
-
-func (r *InMemoryRepository) SaveCustomer(_ context.Context, customer CustomerRecord) error {
-	r.customers[customer.ID] = customer
-	return nil
-}
-
-func (r *InMemoryRepository) FindCustomerByID(_ context.Context, id string) (CustomerRecord, error) {
-	customer, ok := r.customers[id]
-	if !ok {
-		return CustomerRecord{}, fmt.Errorf("customer %s not found", id)
-	}
-	return customer, nil
-}
-
-func (r *InMemoryRepository) SavePayment(_ context.Context, payment PaymentRecord) error {
-	r.payments[payment.ID] = payment
-	return nil
-}
-
-func (r *InMemoryRepository) UpdatePaymentStatus(_ context.Context, id, status, invoiceURL, receiptURL string) error {
-	payment, ok := r.payments[id]
-	if !ok {
-		return fmt.Errorf("payment %s not found", id)
-	}
-	payment.Status = status
-	payment.InvoiceURL = invoiceURL
-	payment.TransactionReceiptURL = receiptURL
-	r.payments[id] = payment
-	return nil
-}
-
-func (r *InMemoryRepository) FindPaymentByID(_ context.Context, id string) (PaymentRecord, error) {
-	payment, ok := r.payments[id]
-	if !ok {
-		return PaymentRecord{}, fmt.Errorf("payment %s not found", id)
-	}
-	return payment, nil
-}
-
-func (r *InMemoryRepository) SaveSubscription(_ context.Context, subscription SubscriptionRecord) error {
-	r.subscriptions[subscription.ID] = subscription
-	return nil
-}
-
-func (r *InMemoryRepository) UpdateSubscriptionStatus(_ context.Context, id, status string) error {
-	subscription, ok := r.subscriptions[id]
-	if !ok {
-		return fmt.Errorf("subscription %s not found", id)
-	}
-	subscription.Status = status
-	r.subscriptions[id] = subscription
-	return nil
-}
-
-func (r *InMemoryRepository) SaveInvoice(_ context.Context, invoice InvoiceRecord) error {
-	r.invoices[invoice.ID] = invoice
-	return nil
-}
-
-// FindInvoiceByPaymentID returns the first invoice linked to a payment.
-func (r *InMemoryRepository) FindInvoiceByPaymentID(_ context.Context, paymentID string) (InvoiceRecord, error) {
-	for _, inv := range r.invoices {
-		if inv.PaymentID == paymentID {
-			return inv, nil
-		}
-	}
-	return InvoiceRecord{}, sql.ErrNoRows
-}
-
-func (r *InMemoryRepository) UpdateInvoiceStatus(_ context.Context, id, status string) error {
-	invoice, ok := r.invoices[id]
-	if !ok {
-		return fmt.Errorf("invoice %s not found", id)
-	}
-	invoice.Status = status
-	r.invoices[id] = invoice
 	return nil
 }

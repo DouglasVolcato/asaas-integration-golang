@@ -12,12 +12,12 @@ import (
 
 // Service orchestrates local persistence and remote Asaas calls.
 type Service struct {
-	repo   Repository
+	repo   *PostgresRepository
 	client *AsaasClient
 }
 
 // NewService creates a payment service.
-func NewService(repo Repository, client *AsaasClient) *Service {
+func NewService(repo *PostgresRepository, client *AsaasClient) *Service {
 	return &Service{repo: repo, client: client}
 }
 
