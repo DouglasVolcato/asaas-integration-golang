@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -12,8 +14,6 @@ import (
 
 	"asaas/src/payments"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -54,18 +54,12 @@ func main() {
 
 	client := payments.NewAsaasClient(cfg.Asaas)
 	service := payments.NewService(repo, client)
-	webhookHandler := payments.NewWebhookHandler(service)
 
-	router := chi.NewRouter()
-	router.Use(middleware.RequestID)
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
-
-	registerRoutes(router, service, client, webhookHandler)
+	handler := buildHandler(service, client)
 
 	srv := &http.Server{ //nolint:gosec
 		Addr:         ":" + cfg.Port,
-		Handler:      router,
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -85,7 +79,7 @@ func loadConfig() (AppConfig, error) {
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		return AppConfig{}, fmt.Errorf("DATABASE_URL is not set")
+		return AppConfig{}, fmt.Errorf("DATABASE_URL n\u00e3o est\u00e1 definida")
 	}
 
 	port := os.Getenv("PORT")
@@ -96,136 +90,226 @@ func loadConfig() (AppConfig, error) {
 	return AppConfig{Port: port, DatabaseDSN: dsn, Asaas: asaasConfig}, nil
 }
 
-func registerRoutes(r *chi.Mux, service *payments.Service, client *payments.AsaasClient, webhook http.Handler) {
-	r.Route("/customers", func(cr chi.Router) {
-		cr.Post("/", func(w http.ResponseWriter, req *http.Request) {
+func buildHandler(service *payments.Service, client *payments.AsaasClient) http.Handler {
+	mux := http.NewServeMux()
+	registerRoutes(mux, service, client)
+	return withRecovery(withRequestLogging(mux))
+}
+
+func registerRoutes(mux *http.ServeMux, service *payments.Service, client *payments.AsaasClient) {
+	customerHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.CustomerRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "payload inv\u00e1lido")
 				return
 			}
 			_, remote, err := service.RegisterCustomer(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
-
-		cr.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
+		case http.MethodGet:
+			id := req.URL.Query().Get("id")
+			if id == "" {
+				respondError(w, http.StatusBadRequest, "id \u00e9 obrigat\u00f3rio")
 				return
 			}
-			customer, err := client.GetCustomer(req.Context(), externalRef)
+			customer, err := client.GetCustomer(req.Context(), id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			respondJSON(w, customer, http.StatusOK)
-		})
-	})
+		default:
+			respondError(w, http.StatusMethodNotAllowed, "m\u00e9todo n\u00e3o permitido")
+		}
+	}
 
-	r.Route("/payments", func(pr chi.Router) {
-		pr.Post("/", func(w http.ResponseWriter, req *http.Request) {
+	paymentHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.PaymentRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "payload inv\u00e1lido")
 				return
 			}
 			_, remote, err := service.CreatePayment(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
-
-		pr.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
+		case http.MethodGet:
+			id := req.URL.Query().Get("id")
+			if id == "" {
+				respondError(w, http.StatusBadRequest, "id \u00e9 obrigat\u00f3rio")
 				return
 			}
-			payment, err := client.GetPayment(req.Context(), externalRef)
+			payment, err := client.GetPayment(req.Context(), id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			respondJSON(w, payment, http.StatusOK)
-		})
-	})
+		default:
+			respondError(w, http.StatusMethodNotAllowed, "m\u00e9todo n\u00e3o permitido")
+		}
+	}
 
-	r.Route("/subscriptions", func(sr chi.Router) {
-		sr.Post("/", func(w http.ResponseWriter, req *http.Request) {
+	subscriptionHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.SubscriptionRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "payload inv\u00e1lido")
 				return
 			}
 			_, remote, err := service.CreateSubscription(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
+		default:
+			respondError(w, http.StatusMethodNotAllowed, "m\u00e9todo n\u00e3o permitido")
+		}
+	}
 
-		sr.Post("/cancel", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
-				return
-			}
-			subscription, err := client.CancelSubscription(req.Context(), externalRef)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
-				return
-			}
-			respondJSON(w, subscription, http.StatusOK)
-		})
-	})
+	subscriptionCancelHandler := func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPost {
+			respondError(w, http.StatusMethodNotAllowed, "m\u00e9todo n\u00e3o permitido")
+			return
+		}
+		id := req.URL.Query().Get("id")
+		if id == "" {
+			respondError(w, http.StatusBadRequest, "id \u00e9 obrigat\u00f3rio")
+			return
+		}
+		subscription, err := client.CancelSubscription(req.Context(), id)
+		if err != nil {
+			respondError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		respondJSON(w, subscription, http.StatusOK)
+	}
 
-	r.Route("/invoices", func(ir chi.Router) {
-		ir.Post("/", func(w http.ResponseWriter, req *http.Request) {
+	invoiceHandler := func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
 			var payload payments.InvoiceRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				http.Error(w, "invalid payload", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "payload inv\u00e1lido")
 				return
 			}
 			_, remote, err := service.CreateInvoice(req.Context(), payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, statusForError(err), err.Error())
 				return
 			}
 			respondJSON(w, remote, http.StatusCreated)
-		})
-
-		ir.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			externalRef := req.URL.Query().Get("externalReference")
-			if externalRef == "" {
-				http.Error(w, "externalReference is required", http.StatusBadRequest)
+		case http.MethodGet:
+			id := req.URL.Query().Get("id")
+			if id == "" {
+				respondError(w, http.StatusBadRequest, "id \u00e9 obrigat\u00f3rio")
 				return
 			}
-			invoice, err := client.GetInvoice(req.Context(), externalRef)
+			invoice, err := client.GetInvoice(req.Context(), id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				respondError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			respondJSON(w, invoice, http.StatusOK)
-		})
+		default:
+			respondError(w, http.StatusMethodNotAllowed, "m\u00e9todo n\u00e3o permitido")
+		}
+	}
+
+	webhookHandler := func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPost {
+			respondError(w, http.StatusMethodNotAllowed, "m\u00e9todo n\u00e3o permitido")
+			return
+		}
+
+		expectedToken := os.Getenv("ASAAS_WEBHOOK_TOKEN")
+		if expectedToken == "" || req.Header.Get("asaas-access-token") != expectedToken {
+			respondError(w, http.StatusUnauthorized, "n\u00e3o autorizado")
+			return
+		}
+
+		payload, err := io.ReadAll(req.Body)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "n\u00e3o foi poss\u00edvel ler o corpo")
+			return
+		}
+		defer req.Body.Close()
+
+		if err := service.HandleWebhookPayload(req.Context(), payload); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}
+
+	mux.HandleFunc("/customers", customerHandler)
+	mux.HandleFunc("/customers/", customerHandler)
+	mux.HandleFunc("/payments", paymentHandler)
+	mux.HandleFunc("/payments/", paymentHandler)
+	mux.HandleFunc("/subscriptions", subscriptionHandler)
+	mux.HandleFunc("/subscriptions/", subscriptionHandler)
+	mux.HandleFunc("/subscriptions/cancel", subscriptionCancelHandler)
+	mux.HandleFunc("/subscriptions/cancel/", subscriptionCancelHandler)
+	mux.HandleFunc("/invoices", invoiceHandler)
+	mux.HandleFunc("/invoices/", invoiceHandler)
+	mux.HandleFunc("/webhooks/asaas", webhookHandler)
+
+	mux.Handle("/swagger/", http.StripPrefix("/swagger/", http.FileServer(http.Dir("swagger"))))
+}
+
+func withRequestLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s completed in %s", r.Method, r.URL.Path, time.Since(start))
 	})
+}
 
-	r.Post("/webhooks/asaas", webhook.ServeHTTP)
-
-	r.Handle("/swagger/*", http.StripPrefix("/swagger/", http.FileServer(http.Dir("swagger"))))
+func withRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic recovered: %v", rec)
+				respondError(w, http.StatusInternalServerError, "erro interno do servidor")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 func respondJSON(w http.ResponseWriter, payload any, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		respondError(w, http.StatusInternalServerError, "erro interno do servidor")
 	}
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(errorResponse{Error: message})
+}
+
+func statusForError(err error) int {
+	if errors.Is(err, sql.ErrNoRows) {
+		return http.StatusNotFound
+	}
+	return http.StatusBadGateway
 }

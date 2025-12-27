@@ -16,10 +16,10 @@ func LoadConfigFromEnv() (Config, error) {
 	apiURL := os.Getenv("ASAAS_API_URL")
 	token := os.Getenv("ASAAS_API_TOKEN")
 	if apiURL == "" {
-		return Config{}, fmt.Errorf("ASAAS_API_URL is not set")
+		return Config{}, fmt.Errorf("ASAAS_API_URL n\u00e3o est\u00e1 definida")
 	}
 	if token == "" {
-		return Config{}, fmt.Errorf("ASAAS_API_TOKEN is not set")
+		return Config{}, fmt.Errorf("ASAAS_API_TOKEN n\u00e3o est\u00e1 definido")
 	}
 	return Config{APIURL: apiURL, APIToken: token}, nil
 }
