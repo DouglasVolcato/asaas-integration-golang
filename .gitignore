@@ -1,1 +1,4 @@
 .env
+node_modules
+ts/dist
+ts/node_modules
